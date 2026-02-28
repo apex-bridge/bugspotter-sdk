@@ -10,6 +10,6 @@
     "outDir": "./dist",
     "isolatedModules": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../packages/common/src/**/*"],
   "exclude": ["node_modules", "dist", "tests", "**/*.test.ts", "**/*.spec.ts"]
 }

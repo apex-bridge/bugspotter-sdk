@@ -19,6 +19,8 @@ export default {
       tsconfig: 'tsconfig.build.json',
       declaration: false, // We'll generate declarations separately
       declarationMap: false,
+      // Include common workspace package source for TypeScript compilation
+      include: ['src/**/*.ts', '../packages/common/src/**/*.ts'],
     }),
   ],
   external: [], // Bundle everything for now

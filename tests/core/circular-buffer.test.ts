@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CircularBuffer } from '../../src/core/circular-buffer';
+import { CircularBuffer } from '@bugspotter/common';
 
 describe('CircularBuffer', () => {
   describe('constructor', () => {

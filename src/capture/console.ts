@@ -1,5 +1,5 @@
 import { BaseCapture, type CaptureOptions } from './base-capture';
-import { CircularBuffer } from '../core/circular-buffer';
+import { CircularBuffer } from '@bugspotter/common';
 
 type ConsoleLevel = 'log' | 'warn' | 'error' | 'info' | 'debug';
 const CONSOLE_METHODS: readonly ConsoleLevel[] = [

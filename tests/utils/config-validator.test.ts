@@ -18,7 +18,7 @@ describe('validateAuthConfig', () => {
     expect(() => {
       validateAuthConfig({
         endpoint: 'https://api.example.com',
-        auth: { apiKey: '' } as any,
+        auth: { apiKey: '' },
       });
     }).toThrow('API key is required in auth configuration');
   });

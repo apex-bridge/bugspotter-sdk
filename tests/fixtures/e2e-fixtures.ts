@@ -330,7 +330,7 @@ export const CONFIG_PRESETS = {
       >,
     },
   },
-  noAuth: {
+  default: {
     auth: {
       apiKey: 'test-api-key-12345',
     },

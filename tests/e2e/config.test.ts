@@ -654,7 +654,7 @@ describe('E2E Configuration Tests', () => {
         },
       });
 
-      const bugspotter = await BugSpotter.init(CONFIG_PRESETS.noAuth);
+      const bugspotter = await BugSpotter.init(CONFIG_PRESETS.default);
 
       const report = await bugspotter.capture();
       report.replay = []; // Clear replay to avoid presigned URL upload

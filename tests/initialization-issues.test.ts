@@ -49,9 +49,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api1.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: 'key1',
-          projectId: 'project1',
         },
       };
 
@@ -59,9 +57,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api2.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: 'key2',
-          projectId: 'project2',
         },
       };
 
@@ -100,9 +96,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: 'test-key',
-          projectId: 'test-project',
         },
       };
 
@@ -138,9 +132,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api1.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: 'key1',
-          projectId: 'project1',
         },
       };
 
@@ -148,9 +140,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api2.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: 'key2',
-          projectId: 'project2',
         },
       };
 
@@ -183,9 +173,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           // apiKey is missing but endpoint is provided
-          projectId: 'test-project',
         } as any, // Type cast to bypass TS validation
       };
 
@@ -212,9 +200,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: undefined as any, // Explicitly undefined
-          projectId: 'test-project',
         },
       };
 
@@ -254,9 +240,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: 'test-key',
-          projectId: 'test-project',
         },
       };
 
@@ -298,9 +282,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: 'test-key',
-          projectId: 'test-project',
         },
       };
 
@@ -316,9 +298,7 @@ describe('BugSpotter Initialization Issues', () => {
         endpoint: 'https://api.example.com',
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: 'test-key',
-          projectId: 'test-project',
         },
         replay: {
           enabled: false,
@@ -334,9 +314,7 @@ describe('BugSpotter Initialization Issues', () => {
       const config: BugSpotterConfig = {
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: 'test-key',
-          projectId: 'test-project',
         },
       };
 

@@ -11,7 +11,6 @@ import { TEST_SCREENSHOT_DATA_URL } from '../fixtures/test-images';
 // Mock configuration
 const MOCK_ENDPOINT = 'https://api.example.com/api/v1/reports';
 const MOCK_API_KEY = 'bgs_test_api_key_12345';
-const MOCK_PROJECT_ID = 'proj-12345678-1234-1234-1234-123456789abc';
 const MOCK_BUG_ID = 'bug-87654321-4321-4321-4321-987654321cba';
 
 // Mock responses
@@ -200,9 +199,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
       auth: {
-        type: 'api-key',
         apiKey: MOCK_API_KEY,
-        projectId: MOCK_PROJECT_ID,
       },
       replay: {
         enabled: true,
@@ -255,9 +252,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
       auth: {
-        type: 'api-key',
         apiKey: MOCK_API_KEY,
-        projectId: MOCK_PROJECT_ID,
       },
       replay: {
         enabled: false,
@@ -313,9 +308,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
       auth: {
-        type: 'api-key',
         apiKey: MOCK_API_KEY,
-        projectId: MOCK_PROJECT_ID,
       },
     });
 
@@ -370,9 +363,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
       auth: {
-        type: 'api-key',
         apiKey: MOCK_API_KEY,
-        projectId: MOCK_PROJECT_ID,
       },
       replay: {
         enabled: true,
@@ -462,9 +453,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
       auth: {
-        type: 'api-key',
         apiKey: MOCK_API_KEY,
-        projectId: MOCK_PROJECT_ID,
       },
       replay: {
         enabled: true,
@@ -518,9 +507,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
       auth: {
-        type: 'api-key',
         apiKey: MOCK_API_KEY,
-        projectId: MOCK_PROJECT_ID,
       },
     });
 
@@ -572,9 +559,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
       auth: {
-        type: 'api-key',
         apiKey: MOCK_API_KEY,
-        projectId: MOCK_PROJECT_ID,
       },
     });
 
@@ -623,34 +608,23 @@ describe('SDK Presigned URL Upload Flow', () => {
       ).rejects.toThrow('API key authentication is required');
     });
 
-    it('should throw error when auth type is not api-key', async () => {
-      fetchMock.mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        json: async () => mockBugReportResponse,
-      });
-
-      // Initialize SDK with wrong auth type
+    it('should throw error when auth is missing apiKey', async () => {
       const sdk = await BugSpotter.init({
         endpoint: MOCK_ENDPOINT,
         showWidget: false,
-        auth: {
-          // @ts-expect-error - Testing invalid auth type
-          type: 'invalid',
-        },
+        auth: { apiKey: '' } as any,
         replay: { enabled: true },
       });
 
       const report = await sdk.capture();
-      report._screenshotPreview = 'data:image/png;base64,iVBORw0KGgo=';
 
       await expect(
         sdk['submit']({
           title: 'Test Bug',
-          description: 'Testing invalid auth',
+          description: 'Testing missing apiKey',
           report,
         })
-      ).rejects.toThrow('API key authentication is required');
+      ).rejects.toThrow('API key is required in auth configuration');
     });
 
     it('should throw error when apiKey is missing', async () => {
@@ -665,10 +639,8 @@ describe('SDK Presigned URL Upload Flow', () => {
         endpoint: MOCK_ENDPOINT,
         showWidget: false,
         auth: {
-          type: 'api-key',
           // @ts-expect-error - Testing missing apiKey
           apiKey: undefined,
-          projectId: MOCK_PROJECT_ID,
         },
         replay: { enabled: true },
       });
@@ -683,38 +655,6 @@ describe('SDK Presigned URL Upload Flow', () => {
           report,
         })
       ).rejects.toThrow('API key is required in auth configuration');
-    });
-
-    it('should throw error when projectId is missing', async () => {
-      fetchMock.mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        json: async () => mockBugReportResponse,
-      });
-
-      // Initialize SDK without projectId
-      const sdk = await BugSpotter.init({
-        endpoint: MOCK_ENDPOINT,
-        showWidget: false,
-        auth: {
-          type: 'api-key',
-          apiKey: MOCK_API_KEY,
-          // @ts-expect-error - Testing missing projectId
-          projectId: undefined,
-        },
-        replay: { enabled: true },
-      });
-
-      const report = await sdk.capture();
-      report._screenshotPreview = 'data:image/png;base64,iVBORw0KGgo=';
-
-      await expect(
-        sdk['submit']({
-          title: 'Test Bug',
-          description: 'Testing missing projectId',
-          report,
-        })
-      ).rejects.toThrow('Project ID is required in auth configuration');
     });
 
     it('should throw error when screenshot upload fails', async () => {
@@ -774,9 +714,7 @@ describe('SDK Presigned URL Upload Flow', () => {
         endpoint: MOCK_ENDPOINT,
         showWidget: false,
         auth: {
-          type: 'api-key',
           apiKey: MOCK_API_KEY,
-          projectId: MOCK_PROJECT_ID,
         },
         replay: { enabled: true },
       });

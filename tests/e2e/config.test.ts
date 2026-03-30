@@ -63,9 +63,7 @@ describe('E2E Configuration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.bugspotter.io/bugs',
         showWidget: false,
@@ -147,9 +145,7 @@ describe('E2E Configuration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://custom-domain.com/api/v1/reports',
         showWidget: false,
@@ -194,9 +190,7 @@ describe('E2E Configuration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -239,9 +233,7 @@ describe('E2E Configuration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -265,9 +257,7 @@ describe('E2E Configuration Tests', () => {
     it('should work with PII detection enabled', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: true, patterns: 'all' },
@@ -295,9 +285,7 @@ describe('E2E Configuration Tests', () => {
     it('should work with PII detection disabled', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: false },
@@ -324,9 +312,7 @@ describe('E2E Configuration Tests', () => {
     it('should work with selective PII patterns', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: true, patterns: ['email'] },
@@ -356,9 +342,7 @@ describe('E2E Configuration Tests', () => {
     it('should work with minimal PII preset', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: true, patterns: 'minimal' },
@@ -410,9 +394,7 @@ describe('E2E Configuration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -447,9 +429,7 @@ describe('E2E Configuration Tests', () => {
     it('should capture replay when enabled', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         replay: { enabled: true, duration: 15 },
@@ -472,9 +452,7 @@ describe('E2E Configuration Tests', () => {
     it('should not capture replay when disabled', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         replay: { enabled: false },
@@ -496,9 +474,7 @@ describe('E2E Configuration Tests', () => {
     it('should respect custom replay duration', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         replay: { enabled: true, duration: 30 },
@@ -511,9 +487,7 @@ describe('E2E Configuration Tests', () => {
     it('should respect replay sampling configuration', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         replay: {
@@ -533,9 +507,7 @@ describe('E2E Configuration Tests', () => {
     it('should create widget when showWidget is true', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: true,
       });
@@ -549,9 +521,7 @@ describe('E2E Configuration Tests', () => {
     it('should not create widget when showWidget is false', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
       });
@@ -565,9 +535,7 @@ describe('E2E Configuration Tests', () => {
     it('should apply custom widget options', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: true,
         widgetOptions: {

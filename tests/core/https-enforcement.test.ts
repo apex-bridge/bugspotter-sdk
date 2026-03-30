@@ -5,9 +5,7 @@ import { OfflineQueue } from '../../src/core/offline-queue';
 import { InsecureEndpointError } from '../../src/utils/url-helpers';
 
 const TEST_AUTH: AuthConfig = {
-  type: 'api-key',
   apiKey: 'test-api-key',
-  projectId: 'test-project',
 };
 
 const INSECURE_ENDPOINT = 'http://api.example.com/bugs';

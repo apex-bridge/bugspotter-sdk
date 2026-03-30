@@ -141,9 +141,7 @@ describe('E2E Performance Benchmarks', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -166,9 +164,7 @@ describe('E2E Performance Benchmarks', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         replay: { enabled: false },
@@ -190,9 +186,7 @@ describe('E2E Performance Benchmarks', () => {
     it('should capture bug report in less than 500ms', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         replay: { enabled: true },
@@ -226,9 +220,7 @@ describe('E2E Performance Benchmarks', () => {
     it('should capture without replay faster (<300ms)', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         replay: { enabled: false },
@@ -256,9 +248,7 @@ describe('E2E Performance Benchmarks', () => {
       async () => {
         const bugspotter = await BugSpotter.init({
           auth: {
-            type: 'api-key',
             apiKey: 'test-api-key-12345',
-            projectId: 'proj-12345678-1234-1234-1234-123456789abc',
           },
           showWidget: false,
           replay: { enabled: true },
@@ -307,9 +297,7 @@ describe('E2E Performance Benchmarks', () => {
     it('should prepare full payload in less than 2 seconds', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -394,9 +382,7 @@ describe('E2E Performance Benchmarks', () => {
     it('should sanitize console logs with minimal overhead (<500ms in JSDOM)', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: true, patterns: 'all' },
@@ -420,9 +406,7 @@ describe('E2E Performance Benchmarks', () => {
       // Compare with disabled sanitization
       const bugspotterNoSanitization = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: false },
@@ -463,9 +447,7 @@ describe('E2E Performance Benchmarks', () => {
     it('should maintain reasonable memory footprint', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         replay: { enabled: true, duration: 30 },
@@ -503,9 +485,7 @@ describe('E2E Performance Benchmarks', () => {
       // 1. Initialize
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -558,9 +538,7 @@ describe('E2E Performance Benchmarks', () => {
     it('should handle multiple captures efficiently', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         replay: { enabled: false }, // Disable replay for faster captures

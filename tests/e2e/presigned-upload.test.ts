@@ -139,7 +139,6 @@ describe('Presigned URL Upload Flow', () => {
     const uploader = new DirectUploader({
       apiEndpoint: 'https://api.example.com',
       apiKey: TEST_API_KEY,
-      projectId: TEST_PROJECT_ID,
       bugId: TEST_BUG_ID,
     });
 
@@ -192,7 +191,6 @@ describe('Presigned URL Upload Flow', () => {
     const uploader = new DirectUploader({
       apiEndpoint: 'https://api.example.com',
       apiKey: TEST_API_KEY,
-      projectId: TEST_PROJECT_ID,
       bugId: TEST_BUG_ID,
     });
 
@@ -251,7 +249,6 @@ describe('Presigned URL Upload Flow', () => {
     const uploader = new DirectUploader({
       apiEndpoint: 'https://api.example.com',
       apiKey: TEST_API_KEY,
-      projectId: TEST_PROJECT_ID,
       bugId: TEST_BUG_ID,
     });
 
@@ -283,7 +280,6 @@ describe('Presigned URL Upload Flow', () => {
     const uploader = new DirectUploader({
       apiEndpoint: 'https://api.example.com',
       apiKey: TEST_API_KEY,
-      projectId: TEST_PROJECT_ID,
       bugId: TEST_BUG_ID,
     });
 
@@ -320,7 +316,6 @@ describe('Presigned URL Upload Flow', () => {
     const uploader = new DirectUploader({
       apiEndpoint: 'https://api.example.com',
       apiKey: TEST_API_KEY,
-      projectId: TEST_PROJECT_ID,
       bugId: TEST_BUG_ID,
     });
 
@@ -386,7 +381,6 @@ describe('Presigned URL Upload Flow', () => {
     const uploader = new DirectUploader({
       apiEndpoint: 'https://api.example.com',
       apiKey: TEST_API_KEY,
-      projectId: TEST_PROJECT_ID,
       bugId: TEST_BUG_ID,
     });
 
@@ -413,7 +407,6 @@ describe('Presigned URL Upload Flow', () => {
     const uploader = new DirectUploader({
       apiEndpoint: 'https://api.example.com',
       apiKey: TEST_API_KEY,
-      projectId: TEST_PROJECT_ID,
       bugId: TEST_BUG_ID,
     });
 

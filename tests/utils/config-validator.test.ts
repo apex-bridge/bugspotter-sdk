@@ -4,7 +4,7 @@ import { validateAuthConfig, validateDeduplicationConfig } from '../../src/utils
 describe('validateAuthConfig', () => {
   it('should throw error when endpoint is missing', () => {
     expect(() => {
-      validateAuthConfig({ auth: { type: 'api-key', apiKey: 'key', projectId: 'proj' } });
+      validateAuthConfig({ auth: { apiKey: 'test' } });
     }).toThrow('No endpoint configured for bug report submission');
   });
 
@@ -14,38 +14,20 @@ describe('validateAuthConfig', () => {
     }).toThrow('API key authentication is required');
   });
 
-  it('should throw error when auth type is not api-key', () => {
-    expect(() => {
-      validateAuthConfig({
-        endpoint: 'https://api.example.com',
-        auth: { type: 'bearer', apiKey: 'key', projectId: 'proj' } as any,
-      });
-    }).toThrow('API key authentication is required');
-  });
-
   it('should throw error when apiKey is missing', () => {
     expect(() => {
       validateAuthConfig({
         endpoint: 'https://api.example.com',
-        auth: { type: 'api-key', apiKey: '', projectId: 'proj' },
+        auth: { apiKey: '' },
       });
     }).toThrow('API key is required in auth configuration');
-  });
-
-  it('should throw error when projectId is missing', () => {
-    expect(() => {
-      validateAuthConfig({
-        endpoint: 'https://api.example.com',
-        auth: { type: 'api-key', apiKey: 'key', projectId: '' },
-      });
-    }).toThrow('Project ID is required in auth configuration');
   });
 
   it('should not throw error for valid config', () => {
     expect(() => {
       validateAuthConfig({
         endpoint: 'https://api.example.com',
-        auth: { type: 'api-key', apiKey: 'key', projectId: 'proj' },
+        auth: { apiKey: 'test-key' },
       });
     }).not.toThrow();
   });

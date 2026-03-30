@@ -31,16 +31,8 @@ export function validateAuthConfig(context: ValidationContext): void {
     throw new Error('API key authentication is required');
   }
 
-  if (context.auth.type !== 'api-key') {
-    throw new Error('API key authentication is required');
-  }
-
   if (!context.auth.apiKey) {
     throw new Error('API key is required in auth configuration');
-  }
-
-  if (!context.auth.projectId) {
-    throw new Error('Project ID is required in auth configuration');
   }
 }
 

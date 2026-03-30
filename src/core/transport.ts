@@ -43,12 +43,11 @@ export class AuthenticationError extends Error {
 // ============================================================================
 
 /**
- * Authentication configuration - API key only
+ * Authentication configuration - API key only.
+ * The API key is scoped to specific projects server-side.
  */
 export type AuthConfig = {
-  type: 'api-key';
   apiKey: string;
-  projectId: string;
 };
 
 export interface RetryConfig {

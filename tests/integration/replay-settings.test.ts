@@ -13,9 +13,7 @@ describe('Replay Quality Settings Integration', () => {
     endpoint: mockEndpoint,
     showWidget: false,
     auth: {
-      type: 'api-key',
       apiKey: 'bgs_test_key',
-      projectId: 'test-project-id',
     },
     replay: {
       enabled: true,

@@ -8,9 +8,7 @@ import {
 } from '../../src/core/transport';
 
 const TEST_AUTH: AuthConfig = {
-  type: 'api-key',
   apiKey: 'test-api-key-12345',
-  projectId: 'proj-12345678-1234-1234-1234-123456789abc',
 };
 
 describe('Retry and Offline Queue', () => {

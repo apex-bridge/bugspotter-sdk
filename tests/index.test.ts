@@ -34,9 +34,7 @@ describe('BugSpotter', () => {
     it('should create a singleton instance', async () => {
       const config: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       };
       const instance1 = await BugSpotter.init(config);
@@ -48,9 +46,7 @@ describe('BugSpotter', () => {
     it('should return the same instance from getInstance', async () => {
       const config: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       };
       const instance1 = await BugSpotter.init(config);
@@ -69,9 +65,7 @@ describe('BugSpotter', () => {
     it('should initialize with apiKey only', async () => {
       const config: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       };
       const bugspotter = await BugSpotter.init(config);
@@ -99,9 +93,7 @@ describe('BugSpotter', () => {
 
       const config: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: 'test-key',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com',
       };
@@ -132,9 +124,7 @@ describe('BugSpotter', () => {
 
       const config: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com',
       };
@@ -149,9 +139,7 @@ describe('BugSpotter', () => {
     it('should initialize with minimal config', async () => {
       const config: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: 'test-key',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       };
       const bugspotter = await BugSpotter.init(config);
@@ -163,9 +151,7 @@ describe('BugSpotter', () => {
     it('should return a copy of config (not reference)', async () => {
       const config: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       };
       const bugspotter = await BugSpotter.init(config);
@@ -180,9 +166,7 @@ describe('BugSpotter', () => {
     it('should capture all data types', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -206,9 +190,7 @@ describe('BugSpotter', () => {
     it('should capture replay events when enabled', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         replay: {
           enabled: true,
@@ -232,9 +214,7 @@ describe('BugSpotter', () => {
     it('should not capture replay events when disabled', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         replay: {
           enabled: false,
@@ -251,9 +231,7 @@ describe('BugSpotter', () => {
     it('should respect replay duration configuration', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         replay: {
           enabled: true,
@@ -268,9 +246,7 @@ describe('BugSpotter', () => {
     it('should capture console logs', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -286,9 +262,7 @@ describe('BugSpotter', () => {
     it('should capture metadata with required fields', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
       const report = await bugspotter.capture();
@@ -304,9 +278,7 @@ describe('BugSpotter', () => {
     it('should return BugReport with correct structure', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
       const report = await bugspotter.capture();
@@ -336,9 +308,7 @@ describe('BugSpotter', () => {
     it('should destroy and clear singleton instance', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
       expect(BugSpotter.getInstance()).toBe(bugspotter);
@@ -351,9 +321,7 @@ describe('BugSpotter', () => {
     it('should allow re-initialization after destroy', async () => {
       const config1: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       };
       const instance1 = await BugSpotter.init(config1);
@@ -362,9 +330,7 @@ describe('BugSpotter', () => {
 
       const config2: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       };
       const instance2 = await BugSpotter.init(config2);
@@ -376,9 +342,7 @@ describe('BugSpotter', () => {
     it('should clean up console interceptor on destroy', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -394,9 +358,7 @@ describe('BugSpotter', () => {
     it('should clean up network interceptor on destroy', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -411,9 +373,7 @@ describe('BugSpotter', () => {
     it('should handle multiple capture calls', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -429,9 +389,7 @@ describe('BugSpotter', () => {
     it('should accumulate console logs between captures', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -451,9 +409,7 @@ describe('BugSpotter', () => {
     it('should create widget by default', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -467,9 +423,7 @@ describe('BugSpotter', () => {
     it('should not create widget when showWidget is false', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
       });
@@ -484,9 +438,7 @@ describe('BugSpotter', () => {
     it('should pass widget options correctly', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         widgetOptions: {
           position: 'top-left',
@@ -509,9 +461,7 @@ describe('BugSpotter', () => {
     it('should destroy widget when BugSpotter is destroyed', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -531,9 +481,7 @@ describe('BugSpotter', () => {
     it('should call capture when widget button is clicked', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
       const captureSpy = vi.spyOn(bugspotter, 'capture');
@@ -559,9 +507,7 @@ describe('BugSpotter', () => {
     it('should handle widget configuration with showWidget true explicitly', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: true,
       });
@@ -794,9 +740,7 @@ describe('BugSpotter', () => {
     it('should show modal with screenshot when widget button is clicked', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -834,9 +778,7 @@ describe('BugSpotter', () => {
       const consoleLogSpy = vi.spyOn(console, 'log');
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
       });
 
@@ -899,9 +841,7 @@ describe('BugSpotter', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: '',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
       });

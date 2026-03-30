@@ -96,9 +96,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -197,9 +195,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -274,9 +270,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -312,9 +306,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -337,9 +329,7 @@ describe('API Submission', () => {
     it('should throw error if no endpoint is configured', async () => {
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         showWidget: false,
         replay: { enabled: false },
@@ -367,9 +357,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -411,9 +399,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -446,9 +432,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -473,9 +457,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -515,9 +497,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -566,9 +546,7 @@ describe('API Submission', () => {
 
       const bugSpotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: TEST_API_KEY,
-          projectId: TEST_PROJECT_ID,
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -652,9 +630,7 @@ describe('API Submission', () => {
 
         const bugSpotter = await BugSpotter.init({
           auth: {
-            type: 'api-key',
             apiKey: TEST_API_KEY,
-            projectId: TEST_PROJECT_ID,
           },
           endpoint,
           showWidget: false,

@@ -2,23 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getAuthHeaders, submitWithAuth, type AuthConfig } from '../../src/core/transport';
 
 const TEST_AUTH: AuthConfig = {
-  type: 'api-key',
   apiKey: 'test-api-key-12345',
-  projectId: 'proj-12345678-1234-1234-1234-123456789abc',
 };
 
 describe('Transport - Authentication', () => {
   describe('getAuthHeaders', () => {
-    it('should handle api-key type', () => {
+    it('should generate X-API-Key header', () => {
       const headers = getAuthHeaders(TEST_AUTH);
       expect(headers).toEqual({
         'X-API-Key': 'test-api-key-12345',
       });
     });
 
-    it('should include projectId in auth config', () => {
-      expect(TEST_AUTH.projectId).toBe('proj-12345678-1234-1234-1234-123456789abc');
-    });
   });
 
   describe('submitWithAuth', () => {
@@ -57,13 +52,12 @@ describe('Transport - Authentication', () => {
     });
 
     it('should throw error if auth apiKey is undefined', async () => {
-      // TypeScript would catch this, but testing runtime behavior
       await expect(
         submitWithAuth(
           'https://api.example.com/bugs',
           JSON.stringify({ test: 'data' }),
           { 'Content-Type': 'application/json' },
-          { type: 'api-key', projectId: 'test-proj', apiKey: undefined } as any
+          { auth: { apiKey: undefined } } as any
         )
       ).rejects.toThrow('Authentication is required: API key must be provided');
     });

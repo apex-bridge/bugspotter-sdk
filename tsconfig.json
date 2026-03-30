@@ -5,8 +5,7 @@
     "target": "ES2015",
     "module": "ESNext",
     "lib": ["ES2015", "DOM"],
-    "downlevelIteration": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
 
     // Strict type checking
     "strict": true,

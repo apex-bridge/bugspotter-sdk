@@ -17,7 +17,6 @@ describe('DirectUploader', () => {
     config = {
       apiEndpoint: 'https://api.example.com',
       apiKey: 'test-api-key-123',
-      projectId: 'proj-456',
       bugId: 'bug-789',
     };
 
@@ -56,7 +55,6 @@ describe('DirectUploader', () => {
       const customConfig: DirectUploadConfig = {
         apiEndpoint: 'https://custom.api.com',
         apiKey: 'custom-key',
-        projectId: 'custom-proj',
         bugId: 'custom-bug',
       };
 
@@ -111,7 +109,6 @@ describe('DirectUploader', () => {
             'x-api-key': 'test-api-key-123',
           },
           body: JSON.stringify({
-            projectId: 'proj-456',
             bugId: 'bug-789',
             fileType: 'screenshot',
             filename: 'screenshot.png',
@@ -338,7 +335,6 @@ describe('DirectUploader', () => {
         'https://api.example.com/api/v1/uploads/presigned-url',
         expect.objectContaining({
           body: JSON.stringify({
-            projectId: 'proj-456',
             bugId: 'bug-789',
             fileType: 'replay',
             filename: 'replay.gz',
@@ -453,7 +449,6 @@ describe('DirectUploader', () => {
         'https://api.example.com/api/v1/uploads/presigned-url',
         expect.objectContaining({
           body: JSON.stringify({
-            projectId: 'proj-456',
             bugId: 'bug-789',
             fileType: 'attachment',
             filename: 'document.pdf',

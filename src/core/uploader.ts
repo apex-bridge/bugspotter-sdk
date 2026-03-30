@@ -6,7 +6,6 @@
 export interface DirectUploadConfig {
   apiEndpoint: string;
   apiKey: string;
-  projectId: string;
   bugId: string;
 }
 
@@ -159,7 +158,6 @@ export class DirectUploader {
             'x-api-key': this.config.apiKey,
           },
           body: JSON.stringify({
-            projectId: this.config.projectId,
             bugId: this.config.bugId,
             fileType,
             filename,

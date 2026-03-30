@@ -86,9 +86,7 @@ describe('E2E Integration Tests', () => {
       // 1. INIT - Initialize SDK with full configuration
       const config: BugSpotterConfig = {
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -176,9 +174,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -229,9 +225,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -259,9 +253,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -290,9 +282,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'invalid-key',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -320,9 +310,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -348,9 +336,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -385,9 +371,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -424,9 +408,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -451,9 +433,7 @@ describe('E2E Integration Tests', () => {
     it('should properly redact emails in console logs', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: true, patterns: ['email'] },
@@ -486,9 +466,7 @@ describe('E2E Integration Tests', () => {
     it('should properly redact credit cards', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: true, patterns: ['creditcard'] },
@@ -517,9 +495,7 @@ describe('E2E Integration Tests', () => {
     it('should properly redact SSNs and IINs', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: true, patterns: ['ssn', 'iin'] },
@@ -548,9 +524,7 @@ describe('E2E Integration Tests', () => {
     it('should properly redact IP addresses', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: true, patterns: ['ip'] },
@@ -579,9 +553,7 @@ describe('E2E Integration Tests', () => {
     it('should handle multiple PII types simultaneously', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: true, patterns: 'all' },
@@ -615,9 +587,7 @@ describe('E2E Integration Tests', () => {
     it('should allow disabling sanitization', async () => {
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         showWidget: false,
         sanitize: { enabled: false },
@@ -720,9 +690,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,
@@ -766,9 +734,7 @@ describe('E2E Integration Tests', () => {
 
       const bugspotter = await BugSpotter.init({
         auth: {
-          type: 'api-key',
           apiKey: 'test-api-key-12345',
-          projectId: 'proj-12345678-1234-1234-1234-123456789abc',
         },
         endpoint: 'https://api.example.com/bugs',
         showWidget: false,

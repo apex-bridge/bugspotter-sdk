@@ -286,9 +286,7 @@ export const MOCK_BACKEND_RESPONSES = {
 export const CONFIG_PRESETS = {
   minimal: {
     auth: {
-      type: 'api-key' as const,
       apiKey: 'test-api-key-12345',
-      projectId: 'proj-12345678-1234-1234-1234-123456789abc',
     },
     showWidget: false,
     replay: { enabled: false },
@@ -296,9 +294,7 @@ export const CONFIG_PRESETS = {
   },
   full: {
     auth: {
-      type: 'api-key' as const,
       apiKey: 'test-api-key-12345',
-      projectId: 'proj-12345678-1234-1234-1234-123456789abc',
     },
     endpoint: 'https://api.example.com/bugs',
     showWidget: true,
@@ -323,9 +319,7 @@ export const CONFIG_PRESETS = {
   },
   selfHosted: {
     auth: {
-      type: 'api-key' as const,
       apiKey: 'test-api-key-12345',
-      projectId: 'proj-12345678-1234-1234-1234-123456789abc',
     },
     endpoint: 'https://localhost:4000/api/bugs',
     showWidget: false,
@@ -336,11 +330,9 @@ export const CONFIG_PRESETS = {
       >,
     },
   },
-  noAuth: {
+  default: {
     auth: {
-      type: 'api-key' as const,
       apiKey: 'test-api-key-12345',
-      projectId: 'proj-12345678-1234-1234-1234-123456789abc',
     },
     endpoint: 'https://api.example.com/bugs',
     showWidget: false,

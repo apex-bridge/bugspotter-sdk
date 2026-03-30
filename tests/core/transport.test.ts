@@ -7,7 +7,7 @@ const TEST_AUTH: AuthConfig = {
 
 describe('Transport - Authentication', () => {
   describe('getAuthHeaders', () => {
-    it('should handle api-key type', () => {
+    it('should generate X-API-Key header', () => {
       const headers = getAuthHeaders(TEST_AUTH);
       expect(headers).toEqual({
         'X-API-Key': 'test-api-key-12345',

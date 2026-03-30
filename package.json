@@ -1,6 +1,6 @@
 {
   "name": "@bugspotter/sdk",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Professional bug reporting SDK with screenshots, session replay, and automatic error capture for web applications",
   "packageManager": "pnpm@9.15.0",
   "main": "dist/index.js",

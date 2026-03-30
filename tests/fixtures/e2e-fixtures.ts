@@ -286,7 +286,6 @@ export const MOCK_BACKEND_RESPONSES = {
 export const CONFIG_PRESETS = {
   minimal: {
     auth: {
-      
       apiKey: 'test-api-key-12345',
     },
     showWidget: false,
@@ -295,7 +294,6 @@ export const CONFIG_PRESETS = {
   },
   full: {
     auth: {
-      
       apiKey: 'test-api-key-12345',
     },
     endpoint: 'https://api.example.com/bugs',
@@ -321,7 +319,6 @@ export const CONFIG_PRESETS = {
   },
   selfHosted: {
     auth: {
-      
       apiKey: 'test-api-key-12345',
     },
     endpoint: 'https://localhost:4000/api/bugs',
@@ -335,7 +332,6 @@ export const CONFIG_PRESETS = {
   },
   noAuth: {
     auth: {
-      
       apiKey: 'test-api-key-12345',
     },
     endpoint: 'https://api.example.com/bugs',

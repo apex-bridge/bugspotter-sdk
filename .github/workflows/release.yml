@@ -184,7 +184,7 @@ jobs:
           echo "   Latest:    ${CDN_URL}/sdk/bugspotter-latest.min.js"
 
       - name: Upload build artifacts to release
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: release-build-${{ steps.version.outputs.VERSION }}
           path: dist/

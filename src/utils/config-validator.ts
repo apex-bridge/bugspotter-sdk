@@ -3,17 +3,16 @@
  * Validates BugSpotter configuration before use
  */
 
-import type { AuthConfig } from '../core/transport';
 import { isSecureEndpoint, InsecureEndpointError } from './url-helpers';
 import type { DeduplicationConfig } from './deduplicator';
 
 export interface ValidationContext {
   endpoint?: string;
-  auth?: AuthConfig;
+  apiKey?: string;
 }
 
 /**
- * Validate authentication configuration
+ * Validate configuration before submitting a bug report
  * @throws Error if configuration is invalid
  */
 export function validateAuthConfig(context: ValidationContext): void {
@@ -22,17 +21,12 @@ export function validateAuthConfig(context: ValidationContext): void {
   }
 
   // SECURITY: Ensure endpoint uses HTTPS
-  // This prevents credentials and sensitive data from being sent over plain HTTP
   if (!isSecureEndpoint(context.endpoint)) {
     throw new InsecureEndpointError(context.endpoint);
   }
 
-  if (!context.auth) {
-    throw new Error('API key authentication is required');
-  }
-
-  if (!context.auth.apiKey) {
-    throw new Error('API key is required in auth configuration');
+  if (!context.apiKey) {
+    throw new Error('API key is required');
   }
 }
 

@@ -31,14 +31,14 @@ describe('Transport - Authentication', () => {
       (global.fetch as any).mockResolvedValueOnce(mockResponse);
 
       const response = await submitWithAuth(
-        'https://api.example.com/bugs',
+        'https://api.example.com',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         { auth: TEST_AUTH }
       );
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.example.com/bugs',
+        'https://api.example.com',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -54,10 +54,10 @@ describe('Transport - Authentication', () => {
     it('should throw error if auth apiKey is undefined', async () => {
       await expect(
         submitWithAuth(
-          'https://api.example.com/bugs',
+          'https://api.example.com',
           JSON.stringify({ test: 'data' }),
           { 'Content-Type': 'application/json' },
-          { auth: { apiKey: undefined } } as any
+          { apiKey: undefined  } as any
         )
       ).rejects.toThrow('Authentication is required: API key must be provided');
     });
@@ -70,7 +70,7 @@ describe('Transport - Authentication', () => {
       (global.fetch as any).mockResolvedValueOnce(mockResponse);
 
       await submitWithAuth(
-        'https://api.example.com/bugs',
+        'https://api.example.com',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         {
@@ -93,7 +93,7 @@ describe('Transport - Authentication', () => {
       (global.fetch as any).mockResolvedValueOnce(mockResponse);
 
       await submitWithAuth(
-        'https://api.example.com/bugs',
+        'https://api.example.com',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         {

@@ -33,9 +33,7 @@ describe('BugSpotter', () => {
   describe('Singleton Pattern', () => {
     it('should create a singleton instance', async () => {
       const config: BugSpotterConfig = {
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       };
       const instance1 = await BugSpotter.init(config);
       const instance2 = await BugSpotter.init(config);
@@ -45,9 +43,7 @@ describe('BugSpotter', () => {
 
     it('should return the same instance from getInstance', async () => {
       const config: BugSpotterConfig = {
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       };
       const instance1 = await BugSpotter.init(config);
       const instance2 = BugSpotter.getInstance();
@@ -64,9 +60,7 @@ describe('BugSpotter', () => {
   describe('Configuration', () => {
     it('should initialize with apiKey only', async () => {
       const config: BugSpotterConfig = {
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       };
       const bugspotter = await BugSpotter.init(config);
 
@@ -92,9 +86,7 @@ describe('BugSpotter', () => {
       } as Response);
 
       const config: BugSpotterConfig = {
-        auth: {
-          apiKey: 'test-key',
-        },
+        apiKey: 'test-key',
         endpoint: 'https://api.example.com',
       };
       const bugspotter = await BugSpotter.init(config);
@@ -123,9 +115,7 @@ describe('BugSpotter', () => {
       } as Response);
 
       const config: BugSpotterConfig = {
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
         endpoint: 'https://api.example.com',
       };
       const bugspotter = await BugSpotter.init(config);
@@ -138,9 +128,7 @@ describe('BugSpotter', () => {
 
     it('should initialize with minimal config', async () => {
       const config: BugSpotterConfig = {
-        auth: {
-          apiKey: 'test-key',
-        },
+        apiKey: 'test-key',
       };
       const bugspotter = await BugSpotter.init(config);
 
@@ -150,9 +138,7 @@ describe('BugSpotter', () => {
 
     it('should return a copy of config (not reference)', async () => {
       const config: BugSpotterConfig = {
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       };
       const bugspotter = await BugSpotter.init(config);
       const configCopy = bugspotter.getConfig();
@@ -165,9 +151,7 @@ describe('BugSpotter', () => {
   describe('Capture', () => {
     it('should capture all data types', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       console.log('Test log');
@@ -189,9 +173,7 @@ describe('BugSpotter', () => {
 
     it('should capture replay events when enabled', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
         replay: {
           enabled: true,
           duration: 15,
@@ -213,9 +195,7 @@ describe('BugSpotter', () => {
 
     it('should not capture replay events when disabled', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
         replay: {
           enabled: false,
         },
@@ -230,9 +210,7 @@ describe('BugSpotter', () => {
 
     it('should respect replay duration configuration', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
         replay: {
           enabled: true,
           duration: 20,
@@ -245,9 +223,7 @@ describe('BugSpotter', () => {
 
     it('should capture console logs', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       console.log('Test message');
@@ -261,9 +237,7 @@ describe('BugSpotter', () => {
 
     it('should capture metadata with required fields', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
       const report = await bugspotter.capture();
 
@@ -277,9 +251,7 @@ describe('BugSpotter', () => {
 
     it('should return BugReport with correct structure', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
       const report = await bugspotter.capture();
 
@@ -307,9 +279,7 @@ describe('BugSpotter', () => {
   describe('Lifecycle', () => {
     it('should destroy and clear singleton instance', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
       expect(BugSpotter.getInstance()).toBe(bugspotter);
 
@@ -320,18 +290,14 @@ describe('BugSpotter', () => {
 
     it('should allow re-initialization after destroy', async () => {
       const config1: BugSpotterConfig = {
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       };
       const instance1 = await BugSpotter.init(config1);
 
       instance1.destroy();
 
       const config2: BugSpotterConfig = {
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       };
       const instance2 = await BugSpotter.init(config2);
 
@@ -341,9 +307,7 @@ describe('BugSpotter', () => {
 
     it('should clean up console interceptor on destroy', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       bugspotter.destroy();
@@ -357,9 +321,7 @@ describe('BugSpotter', () => {
 
     it('should clean up network interceptor on destroy', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       bugspotter.destroy();
@@ -372,9 +334,7 @@ describe('BugSpotter', () => {
   describe('Multiple Capture Calls', () => {
     it('should handle multiple capture calls', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       const report1 = await bugspotter.capture();
@@ -388,9 +348,7 @@ describe('BugSpotter', () => {
 
     it('should accumulate console logs between captures', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       console.log('First message');
@@ -408,9 +366,7 @@ describe('BugSpotter', () => {
   describe('Widget Integration', () => {
     it('should create widget by default', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       // Check if button element was added to the body
@@ -422,9 +378,7 @@ describe('BugSpotter', () => {
 
     it('should not create widget when showWidget is false', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
         showWidget: false,
       });
 
@@ -437,9 +391,7 @@ describe('BugSpotter', () => {
 
     it('should pass widget options correctly', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
         widgetOptions: {
           position: 'top-left',
           icon: '🚨',
@@ -460,9 +412,7 @@ describe('BugSpotter', () => {
 
     it('should destroy widget when BugSpotter is destroyed', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       const buttonBefore = document.querySelector(
@@ -480,9 +430,7 @@ describe('BugSpotter', () => {
 
     it('should call capture when widget button is clicked', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
       const captureSpy = vi.spyOn(bugspotter, 'capture');
 
@@ -506,9 +454,7 @@ describe('BugSpotter', () => {
 
     it('should handle widget configuration with showWidget true explicitly', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
         showWidget: true,
       });
 
@@ -739,9 +685,7 @@ describe('BugSpotter', () => {
   describe('Bug Report Modal Integration', () => {
     it('should show modal with screenshot when widget button is clicked', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       const widgetButton = document.querySelector(
@@ -777,9 +721,7 @@ describe('BugSpotter', () => {
     it('should log bug report data when modal is submitted', async () => {
       const consoleLogSpy = vi.spyOn(console, 'log');
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
       });
 
       const widgetButton = document.querySelector(
@@ -840,9 +782,7 @@ describe('BugSpotter', () => {
       ).length;
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: '',
-        },
+        apiKey: '',
         showWidget: false,
       });
 

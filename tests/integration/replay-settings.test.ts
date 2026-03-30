@@ -12,9 +12,7 @@ describe('Replay Quality Settings Integration', () => {
   const baseConfig: BugSpotterConfig = {
     endpoint: mockEndpoint,
     showWidget: false,
-    auth: {
-      apiKey: 'bgs_test_key',
-    },
+    apiKey: 'bgs_test_key',
     replay: {
       enabled: true,
       duration: 15,

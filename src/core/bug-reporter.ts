@@ -184,9 +184,8 @@ export class BugReporter {
   ): DeduplicationContext {
     validateAuthConfig({
       endpoint: this.config.endpoint,
-      auth: this.config.auth,
+      apiKey: this.config.apiKey,
     });
-
     const dedupContext = createDeduplicationContext(payload);
 
     if (
@@ -242,12 +241,15 @@ export class BugReporter {
       hasReplay: fileAnalysis.hasReplay,
     };
 
+    const apiBaseUrl = getApiBaseUrl(this.config.endpoint!);
+    const submitUrl = `${apiBaseUrl}/api/v1/reports`;
+
     const response = await submitWithAuth(
-      this.config.endpoint!,
+      submitUrl,
       JSON.stringify(createPayload),
       { 'Content-Type': 'application/json' },
       {
-        auth: this.config.auth,
+        auth: { apiKey: this.config.apiKey || '' },
         retry: this.config.retry,
         offline: this.config.offline,
       }
@@ -329,7 +331,7 @@ export class BugReporter {
     const apiEndpoint = getApiBaseUrl(this.config.endpoint!);
     const uploadHandler = new FileUploadHandler(
       apiEndpoint,
-      this.config.auth.apiKey
+      this.config.apiKey || ''
     );
 
     try {

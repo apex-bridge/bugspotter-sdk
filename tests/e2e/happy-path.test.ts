@@ -61,10 +61,8 @@ describe('Happy Path: Complete Bug Reporting Flow', () => {
     });
 
     const config: BugSpotterConfig = {
-      auth: {
-        apiKey: 'test-api-key-12345',
-      },
-      endpoint: 'https://api.bugspotter.example.com/bugs',
+      apiKey: 'test-api-key-12345',
+      endpoint: 'https://api.bugspotter.example.com',
       showWidget: false,
       replay: {
         enabled: true,

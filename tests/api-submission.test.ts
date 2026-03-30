@@ -95,10 +95,8 @@ describe('API Submission', () => {
         });
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: false },
       });
@@ -119,7 +117,7 @@ describe('API Submission', () => {
 
       // Check bug report creation call
       const createCall = fetchMock.mock.calls[0];
-      expect(createCall[0]).toBe('https://api.example.com/bugs');
+      expect(createCall[0]).toBe('https://api.example.com/api/v1/reports');
       expect(createCall[1].method).toBe('POST');
       expect(createCall[1].headers['X-API-Key']).toBe(TEST_API_KEY);
 
@@ -146,11 +144,11 @@ describe('API Submission', () => {
       });
 
       const bugSpotter = await BugSpotter.init({
-        endpoint: 'https://api.example.com/bugs',
+        endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: false },
         // @ts-expect-error - Testing without auth
-        auth: undefined,
+        apiKey: undefined,
       });
 
       const report = await bugSpotter.capture();
@@ -159,7 +157,7 @@ describe('API Submission', () => {
       const payload = { title: 'Test', description: 'Test', report };
 
       await expect(bugSpotter.submit(payload)).rejects.toThrow(
-        'API key authentication is required'
+        'API key is required'
       );
     });
 
@@ -194,10 +192,8 @@ describe('API Submission', () => {
         });
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: false },
       });
@@ -269,10 +265,8 @@ describe('API Submission', () => {
         });
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: true }, // Enable replay!
       });
@@ -305,10 +299,8 @@ describe('API Submission', () => {
       });
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: false },
       });
@@ -328,9 +320,7 @@ describe('API Submission', () => {
   describe('Error handling', () => {
     it('should throw error if no endpoint is configured', async () => {
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
+        apiKey: TEST_API_KEY,
         showWidget: false,
         replay: { enabled: false },
       });
@@ -356,10 +346,8 @@ describe('API Submission', () => {
       });
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: false },
       });
@@ -398,10 +386,8 @@ describe('API Submission', () => {
         });
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
       });
 
@@ -431,10 +417,8 @@ describe('API Submission', () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
         retry: { maxRetries: 0 }, // Disable retries for this test
       });
@@ -456,10 +440,8 @@ describe('API Submission', () => {
       });
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: false },
       });
@@ -496,10 +478,8 @@ describe('API Submission', () => {
       });
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
         retry: { maxRetries: 0 }, // Disable retries for this test
       });
@@ -545,10 +525,8 @@ describe('API Submission', () => {
         });
 
       const bugSpotter = await BugSpotter.init({
-        auth: {
-          apiKey: TEST_API_KEY,
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: TEST_API_KEY,
+        endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: false },
       });
@@ -572,7 +550,7 @@ describe('API Submission', () => {
 
       // Verify bug report creation call
       const call = fetchMock.mock.calls[0];
-      expect(call[0]).toBe('https://api.example.com/bugs');
+      expect(call[0]).toBe('https://api.example.com/api/v1/reports');
 
       // Handle both compressed and uncompressed payloads
       const requestBody = call[1].body;
@@ -629,9 +607,7 @@ describe('API Submission', () => {
           });
 
         const bugSpotter = await BugSpotter.init({
-          auth: {
-            apiKey: TEST_API_KEY,
-          },
+          apiKey: TEST_API_KEY,
           endpoint,
           showWidget: false,
           replay: { enabled: false },

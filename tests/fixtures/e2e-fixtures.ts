@@ -285,18 +285,14 @@ export const MOCK_BACKEND_RESPONSES = {
  */
 export const CONFIG_PRESETS = {
   minimal: {
-    auth: {
-      apiKey: 'test-api-key-12345',
-    },
+    apiKey: 'test-api-key-12345',
     showWidget: false,
     replay: { enabled: false },
     sanitize: { enabled: false },
   },
   full: {
-    auth: {
-      apiKey: 'test-api-key-12345',
-    },
-    endpoint: 'https://api.example.com/bugs',
+    apiKey: 'test-api-key-12345',
+    endpoint: 'https://api.example.com',
     showWidget: true,
     replay: {
       enabled: true,
@@ -318,9 +314,7 @@ export const CONFIG_PRESETS = {
     },
   },
   selfHosted: {
-    auth: {
-      apiKey: 'test-api-key-12345',
-    },
+    apiKey: 'test-api-key-12345',
     endpoint: 'https://localhost:4000/api/bugs',
     showWidget: false,
     sanitize: {
@@ -331,10 +325,8 @@ export const CONFIG_PRESETS = {
     },
   },
   default: {
-    auth: {
-      apiKey: 'test-api-key-12345',
-    },
-    endpoint: 'https://api.example.com/bugs',
+    apiKey: 'test-api-key-12345',
+    endpoint: 'https://api.example.com',
     showWidget: false,
     replay: { enabled: true },
     sanitize: { enabled: true },

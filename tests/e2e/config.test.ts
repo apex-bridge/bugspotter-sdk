@@ -62,10 +62,8 @@ describe('E2E Configuration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.bugspotter.io/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.bugspotter.io',
         showWidget: false,
       });
 
@@ -76,7 +74,7 @@ describe('E2E Configuration Tests', () => {
       await bugspotter.submit(payload);
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://api.bugspotter.io/bugs',
+        'https://api.bugspotter.io',
         expect.any(Object)
       );
     });
@@ -144,9 +142,7 @@ describe('E2E Configuration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         endpoint: 'https://custom-domain.com/api/v1/reports',
         showWidget: false,
       });
@@ -189,10 +185,8 @@ describe('E2E Configuration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
       });
 
@@ -232,10 +226,8 @@ describe('E2E Configuration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
       });
 
@@ -256,9 +248,7 @@ describe('E2E Configuration Tests', () => {
   describe('PII Sanitization Configuration', () => {
     it('should work with PII detection enabled', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: true, patterns: 'all' },
       });
@@ -284,9 +274,7 @@ describe('E2E Configuration Tests', () => {
 
     it('should work with PII detection disabled', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: false },
       });
@@ -311,9 +299,7 @@ describe('E2E Configuration Tests', () => {
 
     it('should work with selective PII patterns', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: true, patterns: ['email'] },
       });
@@ -341,9 +327,7 @@ describe('E2E Configuration Tests', () => {
 
     it('should work with minimal PII preset', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: true, patterns: 'minimal' },
       });
@@ -393,10 +377,8 @@ describe('E2E Configuration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
       });
 
@@ -428,9 +410,7 @@ describe('E2E Configuration Tests', () => {
   describe('Replay Configuration', () => {
     it('should capture replay when enabled', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         replay: { enabled: true, duration: 15 },
       });
@@ -451,9 +431,7 @@ describe('E2E Configuration Tests', () => {
 
     it('should not capture replay when disabled', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         replay: { enabled: false },
       });
@@ -473,9 +451,7 @@ describe('E2E Configuration Tests', () => {
 
     it('should respect custom replay duration', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         replay: { enabled: true, duration: 30 },
       });
@@ -486,9 +462,7 @@ describe('E2E Configuration Tests', () => {
 
     it('should respect replay sampling configuration', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         replay: {
           enabled: true,
@@ -506,9 +480,7 @@ describe('E2E Configuration Tests', () => {
   describe('Widget Configuration', () => {
     it('should create widget when showWidget is true', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: true,
       });
 
@@ -520,9 +492,7 @@ describe('E2E Configuration Tests', () => {
 
     it('should not create widget when showWidget is false', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
       });
 
@@ -534,9 +504,7 @@ describe('E2E Configuration Tests', () => {
 
     it('should apply custom widget options', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: true,
         widgetOptions: {
           position: 'top-left',

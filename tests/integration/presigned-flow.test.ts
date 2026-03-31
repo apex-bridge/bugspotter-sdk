@@ -576,7 +576,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       const sdk = await BugSpotter.init({
         endpoint: MOCK_ENDPOINT,
         showWidget: false,
-        apiKey: undefined,
+        apiKey: undefined as any,
         replay: { enabled: true },
       });
 
@@ -623,7 +623,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       const sdk = await BugSpotter.init({
         endpoint: MOCK_ENDPOINT,
         showWidget: false,
-        apiKey: undefined,
+        apiKey: undefined as any,
         replay: { enabled: true },
       });
 

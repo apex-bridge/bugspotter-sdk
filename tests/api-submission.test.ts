@@ -147,7 +147,7 @@ describe('API Submission', () => {
         endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: false },
-        apiKey: undefined,
+        apiKey: undefined as any,
       });
 
       const report = await bugSpotter.capture();

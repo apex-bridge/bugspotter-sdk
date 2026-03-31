@@ -342,8 +342,8 @@ export interface BugSpotterConfig {
   /** Base URL of BugSpotter API (e.g., https://api.example.com). SDK appends paths internally. */
   endpoint?: string;
 
-  /** API key for authentication (starts with 'bgs_') */
-  apiKey?: string;
+  /** API key for authentication (starts with 'bgs_'). Required. */
+  apiKey: string;
 
   showWidget?: boolean;
   widgetOptions?: FloatingButtonOptions;

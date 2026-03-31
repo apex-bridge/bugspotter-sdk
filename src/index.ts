@@ -7,7 +7,7 @@ import { getLogger } from './utils/logger';
 import type { RetryConfig } from './core/transport';
 import type { OfflineConfig } from './core/offline-queue';
 import { DEFAULT_REPLAY_DURATION_SECONDS } from './constants';
-import { getApiBaseUrl } from './utils/url-helpers';
+import { getApiBaseUrl, isSecureEndpoint } from './utils/url-helpers';
 import { VERSION } from './version';
 import { type DeduplicationConfig } from './utils/deduplicator';
 import { validateDeduplicationConfig } from './utils/config-validator';
@@ -254,8 +254,12 @@ export class BugSpotter {
     let backendSettings: ReplayQualitySettings | null = null;
     const replayEnabled = config.replay?.enabled ?? true;
     if (replayEnabled && config.endpoint) {
-      // Validate auth is configured before attempting fetch
-      if (!config.apiKey) {
+      // SECURITY: Don't send API key over insecure connection
+      if (!isSecureEndpoint(config.endpoint)) {
+        logger.warn(
+          'Insecure endpoint — skipping backend settings fetch to protect API key.'
+        );
+      } else if (!config.apiKey) {
         logger.warn(
           'Endpoint provided but no API key configured. Skipping backend settings fetch.'
         );

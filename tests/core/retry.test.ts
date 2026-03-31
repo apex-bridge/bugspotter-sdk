@@ -68,7 +68,7 @@ describe('Retry and Offline Queue', () => {
         });
 
       const response = await submitWithAuth(
-        'https://api.example.com',
+        'https://api.example.com/api/v1/reports',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         { auth: TEST_AUTH, retry: retryConfig }
@@ -105,7 +105,7 @@ describe('Retry and Offline Queue', () => {
 
       const start = Date.now();
       await submitWithAuth(
-        'https://api.example.com',
+        'https://api.example.com/api/v1/reports',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         { auth: TEST_AUTH, retry: retryConfig }
@@ -137,7 +137,7 @@ describe('Retry and Offline Queue', () => {
         });
 
         const response = await submitWithAuth(
-          'https://api.example.com',
+          'https://api.example.com/api/v1/reports',
           JSON.stringify({ test: 'data' }),
           { 'Content-Type': 'application/json' },
           { auth: TEST_AUTH, retry: retryConfig }
@@ -164,7 +164,7 @@ describe('Retry and Offline Queue', () => {
       });
 
       const response = await submitWithAuth(
-        'https://api.example.com',
+        'https://api.example.com/api/v1/reports',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         { auth: TEST_AUTH, retry: retryConfig }
@@ -193,7 +193,7 @@ describe('Retry and Offline Queue', () => {
         });
 
       const response = await submitWithAuth(
-        'https://api.example.com',
+        'https://api.example.com/api/v1/reports',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         { auth: TEST_AUTH, retry: retryConfig }
@@ -225,7 +225,7 @@ describe('Retry and Offline Queue', () => {
 
       const start = Date.now();
       await submitWithAuth(
-        'https://api.example.com',
+        'https://api.example.com/api/v1/reports',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         { auth: TEST_AUTH, retry: retryConfig }
@@ -258,7 +258,7 @@ describe('Retry and Offline Queue', () => {
 
         await expect(
           submitWithAuth(
-            'https://api.example.com',
+            'https://api.example.com/api/v1/reports',
             JSON.stringify({ test: 'data' }),
             { 'Content-Type': 'application/json' },
             { auth: TEST_AUTH, offline: offlineConfig, retry: retryConfig }
@@ -351,7 +351,7 @@ describe('Retry and Offline Queue', () => {
       for (let i = 0; i < 3; i++) {
         await expect(
           submitWithAuth(
-            'https://api.example.com',
+            'https://api.example.com/api/v1/reports',
             JSON.stringify({ test: `data-${i}` }),
             { 'Content-Type': 'application/json' },
             { auth: TEST_AUTH, offline: offlineConfig, retry: retryConfig }
@@ -386,7 +386,7 @@ describe('Retry and Offline Queue', () => {
 
       await expect(
         submitWithAuth(
-          'https://api.example.com',
+          'https://api.example.com/api/v1/reports',
           blob,
           { 'Content-Type': 'application/json' },
           { auth: TEST_AUTH, offline: offlineConfig, retry: retryConfig }
@@ -405,7 +405,7 @@ describe('Retry and Offline Queue', () => {
         // Manually add an expired request to queue
         const expiredRequest = {
           id: 'req_old',
-          endpoint: 'https://api.example.com',
+          endpoint: 'https://api.example.com/api/v1/reports',
           body: JSON.stringify({ test: 'old' }),
           headers: { 'Content-Type': 'application/json' },
           timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000, // 8 days ago
@@ -425,7 +425,7 @@ describe('Retry and Offline Queue', () => {
         });
 
         await submitWithAuth(
-          'https://api.example.com',
+          'https://api.example.com/api/v1/reports',
           JSON.stringify({ test: 'new' }),
           { 'Content-Type': 'application/json' },
           {
@@ -470,7 +470,7 @@ describe('Retry and Offline Queue', () => {
 
       await expect(
         submitWithAuth(
-          'https://api.example.com',
+          'https://api.example.com/api/v1/reports',
           JSON.stringify({ test: 'data' }),
           { 'Content-Type': 'application/json' },
           { auth: TEST_AUTH, offline: offlineConfig, retry: retryConfig }
@@ -573,7 +573,7 @@ describe('Retry and Offline Queue', () => {
       const queue = [
         {
           id: 'req_1',
-          endpoint: 'https://api.example.com',
+          endpoint: 'https://api.example.com/api/v1/reports',
           body: '{}',
           headers: {},
           timestamp: Date.now(),

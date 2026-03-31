@@ -249,7 +249,7 @@ export class BugReporter {
       JSON.stringify(createPayload),
       { 'Content-Type': 'application/json' },
       {
-        auth: { apiKey: this.config.apiKey || '' },
+        auth: { apiKey: this.config.apiKey! },
         retry: this.config.retry,
         offline: this.config.offline,
       }
@@ -331,7 +331,7 @@ export class BugReporter {
     const apiEndpoint = getApiBaseUrl(this.config.endpoint!);
     const uploadHandler = new FileUploadHandler(
       apiEndpoint,
-      this.config.apiKey || ''
+      this.config.apiKey!
     );
 
     try {

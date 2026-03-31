@@ -8,7 +8,7 @@ describe('validateAuthConfig', () => {
     }).toThrow('No endpoint configured for bug report submission');
   });
 
-  it('should throw error when auth is missing', () => {
+  it('should throw error when apiKey is missing', () => {
     expect(() => {
       validateAuthConfig({ endpoint: 'https://api.example.com' });
     }).toThrow('API key is required');

@@ -223,7 +223,7 @@ describe('Happy Path: Complete Bug Reporting Flow', () => {
 
     // Verify call 1: Create bug report (includes hasScreenshot and hasReplay flags)
     const createCall = fetchMock.mock.calls[1];
-    expect(createCall[0]).toBe(config.endpoint);
+    expect(createCall[0]).toBe(config.endpoint + '/api/v1/reports');
     expect(createCall[1].method).toBe('POST');
     expect(createCall[1].headers['X-API-Key']).toBe('test-api-key-12345');
     expect(createCall[1].headers['Content-Type']).toBe('application/json');

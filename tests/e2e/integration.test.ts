@@ -152,7 +152,7 @@ describe('E2E Integration Tests', () => {
       // Verify fetch was called (settings + create)
       expect(fetchMock).toHaveBeenCalledTimes(2);
       const call = fetchMock.mock.calls[1]; // Bug report creation is call 1, settings is call 0
-      expect(call[0]).toBe(config.endpoint);
+      expect(call[0]).toBe(config.endpoint + '/api/v1/reports');
 
       // Verify auth header
       const headers = call[1].headers;

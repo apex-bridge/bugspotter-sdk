@@ -74,7 +74,7 @@ describe('E2E Configuration Tests', () => {
       await bugspotter.submit(payload);
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://api.bugspotter.io',
+        'https://api.bugspotter.io/api/v1/reports',
         expect.any(Object)
       );
     });
@@ -113,7 +113,7 @@ describe('E2E Configuration Tests', () => {
       await bugspotter.submit(payload);
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://localhost:4000/api/bugs',
+        'https://localhost:4000/api/v1/reports',
         expect.any(Object)
       );
     });

@@ -142,7 +142,7 @@ describe('BugSpotter Initialization Issues', () => {
 
       // ISSUE: This test will PASS - original config is preserved (expected)
       expect(instanceConfig?.endpoint).toBe('https://api1.example.com');
-      expect(instanceConfig?.auth.apiKey).toBe('key1');
+      expect(instanceConfig?.apiKey).toBe('key1');
     });
   });
 
@@ -162,10 +162,8 @@ describe('BugSpotter Initialization Issues', () => {
       const config: BugSpotterConfig = {
         endpoint: 'https://api.example.com',
         showWidget: false,
-        auth: {
-          // apiKey is missing but endpoint is provided
-        } as any, // Type cast to bypass TS validation
-      };
+        // apiKey intentionally missing
+      } as any;
 
       await BugSpotter.init(config);
 

@@ -147,7 +147,6 @@ describe('API Submission', () => {
         endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: false },
-        // @ts-expect-error - Testing without auth
         apiKey: undefined,
       });
 
@@ -621,7 +620,7 @@ describe('API Submission', () => {
 
         expect(fetchMock).toHaveBeenCalled();
         const call = fetchMock.mock.calls[0];
-        expect(call[0]).toBe(endpoint);
+        expect(call[0]).toBe(endpoint + '/api/v1/reports');
 
         bugSpotter.destroy();
         fetchMock.mockClear();

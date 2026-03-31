@@ -315,7 +315,7 @@ export const CONFIG_PRESETS = {
   },
   selfHosted: {
     apiKey: 'test-api-key-12345',
-    endpoint: 'https://localhost:4000/api/bugs',
+    endpoint: 'https://localhost:4000',
     showWidget: false,
     sanitize: {
       enabled: true,

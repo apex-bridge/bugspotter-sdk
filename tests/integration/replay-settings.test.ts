@@ -87,8 +87,7 @@ describe('Replay Quality Settings Integration', () => {
         },
       };
 
-      // @ts-expect-error - Testing without required auth config
-      await BugSpotter.init(configWithoutApiKey);
+      await BugSpotter.init(configWithoutApiKey as BugSpotterConfig);
 
       // Should NOT call fetch without API key (security: don't leak endpoint existence)
       expect(fetchSpy).not.toHaveBeenCalled();

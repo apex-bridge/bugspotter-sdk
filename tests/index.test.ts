@@ -65,7 +65,7 @@ describe('BugSpotter', () => {
       const bugspotter = await BugSpotter.init(config);
 
       expect(bugspotter).toBeDefined();
-      expect(bugspotter.getConfig().auth).toEqual(config.auth);
+      expect(bugspotter.getConfig().apiKey).toEqual(config.apiKey);
     });
 
     it('should initialize with endpoint only', async () => {
@@ -93,7 +93,7 @@ describe('BugSpotter', () => {
 
       expect(bugspotter).toBeDefined();
       const savedConfig = bugspotter.getConfig();
-      expect(savedConfig.auth).toEqual(config.auth);
+      expect(savedConfig.apiKey).toEqual(config.apiKey);
       expect(savedConfig.endpoint).toBe(config.endpoint);
     });
 
@@ -122,7 +122,7 @@ describe('BugSpotter', () => {
 
       expect(bugspotter).toBeDefined();
       const savedConfig = bugspotter.getConfig();
-      expect(savedConfig.auth).toEqual(config.auth);
+      expect(savedConfig.apiKey).toEqual(config.apiKey);
       expect(savedConfig.endpoint).toBe(config.endpoint);
     });
 
@@ -133,7 +133,7 @@ describe('BugSpotter', () => {
       const bugspotter = await BugSpotter.init(config);
 
       expect(bugspotter).toBeDefined();
-      expect(bugspotter.getConfig().auth).toEqual(config.auth);
+      expect(bugspotter.getConfig().apiKey).toEqual(config.apiKey);
     });
 
     it('should return a copy of config (not reference)', async () => {
@@ -143,7 +143,7 @@ describe('BugSpotter', () => {
       const bugspotter = await BugSpotter.init(config);
       const configCopy = bugspotter.getConfig();
 
-      expect(configCopy.auth).toEqual(config.auth);
+      expect(configCopy.apiKey).toEqual(config.apiKey);
       expect(configCopy).not.toBe(config);
     });
   });
@@ -302,7 +302,7 @@ describe('BugSpotter', () => {
       const instance2 = await BugSpotter.init(config2);
 
       expect(instance2).not.toBe(instance1);
-      expect(instance2.getConfig().auth).toEqual(config2.auth);
+      expect(instance2.getConfig().apiKey).toEqual(config2.apiKey);
     });
 
     it('should clean up console interceptor on destroy', async () => {

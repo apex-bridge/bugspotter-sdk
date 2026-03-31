@@ -18,7 +18,7 @@ describe('HTTPS Enforcement', () => {
       expect(() =>
         validateAuthConfig({
           endpoint: INSECURE_ENDPOINT,
-          auth: TEST_AUTH,
+          apiKey: TEST_AUTH.apiKey,
         })
       ).toThrow(InsecureEndpointError);
     });
@@ -27,7 +27,7 @@ describe('HTTPS Enforcement', () => {
       expect(() =>
         validateAuthConfig({
           endpoint: SECURE_ENDPOINT,
-          auth: TEST_AUTH,
+          apiKey: TEST_AUTH.apiKey,
         })
       ).not.toThrow();
     });
@@ -36,7 +36,7 @@ describe('HTTPS Enforcement', () => {
       expect(() =>
         validateAuthConfig({
           endpoint: LOCALHOST_ENDPOINT,
-          auth: TEST_AUTH,
+          apiKey: TEST_AUTH.apiKey,
         })
       ).not.toThrow();
     });

@@ -13,8 +13,8 @@ describe('Upload Helpers', () => {
   // Check if we're in a real browser environment with full Blob API support
   const hasFullBlobAPI =
     typeof Blob !== 'undefined' &&
-    Blob.prototype.hasOwnProperty('stream') &&
-    Blob.prototype.hasOwnProperty('arrayBuffer');
+    'stream' in Blob.prototype &&
+    'arrayBuffer' in Blob.prototype;
 
   describe('compressReplayEvents', () => {
     it('should compress events using CompressionStream', async () => {

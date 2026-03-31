@@ -177,7 +177,7 @@ describe('Presigned URL Upload Flow', () => {
 
   it('should upload compressed replay via presigned URL', async () => {
     // Skip if blob.stream() not available (jsdom environment)
-    const hasFullBlobAPI = typeof Blob !== 'undefined' && Blob.prototype.hasOwnProperty('stream');
+    const hasFullBlobAPI = typeof Blob !== 'undefined' && 'stream' in Blob.prototype;
     if (!hasFullBlobAPI) {
       console.log('Skipping replay compression test in jsdom environment');
       return;
@@ -232,7 +232,7 @@ describe('Presigned URL Upload Flow', () => {
   });
 
   it('should upload both screenshot and replay', async () => {
-    const hasFullBlobAPI = typeof Blob !== 'undefined' && Blob.prototype.hasOwnProperty('stream');
+    const hasFullBlobAPI = typeof Blob !== 'undefined' && 'stream' in Blob.prototype;
     if (!hasFullBlobAPI) {
       console.log('Skipping combined upload test in jsdom environment');
       return;
@@ -420,7 +420,7 @@ describe('Presigned URL Upload Flow', () => {
 
 describe('Compression Integration', () => {
   it('should compress replay events with Web Streams API', async () => {
-    const hasFullBlobAPI = typeof Blob !== 'undefined' && Blob.prototype.hasOwnProperty('stream');
+    const hasFullBlobAPI = typeof Blob !== 'undefined' && 'stream' in Blob.prototype;
     if (!hasFullBlobAPI) {
       console.log('Skipping compression test in jsdom environment');
       return;

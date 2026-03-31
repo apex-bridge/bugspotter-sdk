@@ -80,7 +80,7 @@ describe('DirectUploader', () => {
       });
 
       // Step 2: XHR upload triggers success
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -155,7 +155,7 @@ describe('DirectUploader', () => {
       });
 
       // Simulate progress events
-      mockXHR.upload.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.upload.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'progress') {
           // Simulate 50% progress
           setTimeout(() => callback({ lengthComputable: true, loaded: 5000, total: 10000 }), 0);
@@ -164,7 +164,7 @@ describe('DirectUploader', () => {
         }
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -218,7 +218,7 @@ describe('DirectUploader', () => {
       });
 
       // Simulate XHR error
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'error') {
           setTimeout(() => callback(), 0);
         }
@@ -244,7 +244,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -287,7 +287,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'abort') {
           setTimeout(() => callback(), 0);
         }
@@ -317,7 +317,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -359,7 +359,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -390,13 +390,13 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.upload.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.upload.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'progress') {
           setTimeout(() => callback({ lengthComputable: true, loaded: 250000, total: 1000000 }), 0);
         }
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -431,7 +431,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -471,7 +471,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -499,7 +499,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -623,7 +623,7 @@ describe('DirectUploader', () => {
 
       // S3 returns 403 for expired presigned URL
       mockXHR.status = 403;
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -665,14 +665,14 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.upload.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.upload.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'progress') {
           // Event without lengthComputable
           setTimeout(() => callback({ lengthComputable: false, loaded: 5000, total: 0 }), 0);
         }
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -701,7 +701,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.upload.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.upload.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'progress') {
           // Simulate various progress points
           setTimeout(() => callback({ lengthComputable: true, loaded: 333, total: 1000 }), 0);
@@ -709,7 +709,7 @@ describe('DirectUploader', () => {
         }
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -739,7 +739,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -769,7 +769,7 @@ describe('DirectUploader', () => {
         }),
       });
 
-      mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+      mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
         if (event === 'load') {
           setTimeout(() => callback(), 0);
         }
@@ -800,7 +800,7 @@ describe('DirectUploader', () => {
           }),
         });
 
-        mockXHR.addEventListener.mockImplementation((event: string, callback: Function) => {
+        mockXHR.addEventListener.mockImplementation((event: string, callback: (...args: unknown[]) => void) => {
           if (event === 'load') {
             setTimeout(() => callback(), 0);
           }

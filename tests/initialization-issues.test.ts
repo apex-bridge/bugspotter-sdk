@@ -48,17 +48,13 @@ describe('BugSpotter Initialization Issues', () => {
       const config1: BugSpotterConfig = {
         endpoint: 'https://api1.example.com',
         showWidget: false,
-        auth: {
-          apiKey: 'key1',
-        },
+        apiKey: 'key1',
       };
 
       const config2: BugSpotterConfig = {
         endpoint: 'https://api2.example.com',
         showWidget: false,
-        auth: {
-          apiKey: 'key2',
-        },
+        apiKey: 'key2',
       };
 
       // First init
@@ -95,9 +91,7 @@ describe('BugSpotter Initialization Issues', () => {
       const config: BugSpotterConfig = {
         endpoint: 'https://api.example.com',
         showWidget: false,
-        auth: {
-          apiKey: 'test-key',
-        },
+        apiKey: 'test-key',
       };
 
       // First init - fetches settings
@@ -131,17 +125,13 @@ describe('BugSpotter Initialization Issues', () => {
       const config1: BugSpotterConfig = {
         endpoint: 'https://api1.example.com',
         showWidget: false,
-        auth: {
-          apiKey: 'key1',
-        },
+        apiKey: 'key1',
       };
 
       const config2: BugSpotterConfig = {
         endpoint: 'https://api2.example.com',
         showWidget: false,
-        auth: {
-          apiKey: 'key2',
-        },
+        apiKey: 'key2',
       };
 
       await BugSpotter.init(config1);
@@ -152,7 +142,7 @@ describe('BugSpotter Initialization Issues', () => {
 
       // ISSUE: This test will PASS - original config is preserved (expected)
       expect(instanceConfig?.endpoint).toBe('https://api1.example.com');
-      expect(instanceConfig?.auth.apiKey).toBe('key1');
+      expect(instanceConfig?.apiKey).toBe('key1');
     });
   });
 
@@ -172,10 +162,8 @@ describe('BugSpotter Initialization Issues', () => {
       const config: BugSpotterConfig = {
         endpoint: 'https://api.example.com',
         showWidget: false,
-        auth: {
-          // apiKey is missing but endpoint is provided
-        } as any, // Type cast to bypass TS validation
-      };
+        // apiKey intentionally missing
+      } as any;
 
       await BugSpotter.init(config);
 
@@ -199,9 +187,7 @@ describe('BugSpotter Initialization Issues', () => {
       const config: BugSpotterConfig = {
         endpoint: 'https://api.example.com',
         showWidget: false,
-        auth: {
-          apiKey: undefined as any, // Explicitly undefined
-        },
+        apiKey: undefined as any, // Explicitly undefined
       };
 
       await BugSpotter.init(config);
@@ -239,9 +225,7 @@ describe('BugSpotter Initialization Issues', () => {
       const config: BugSpotterConfig = {
         endpoint: 'https://api.example.com',
         showWidget: false,
-        auth: {
-          apiKey: 'test-key',
-        },
+        apiKey: 'test-key',
       };
 
       // Call init() three times concurrently
@@ -281,9 +265,7 @@ describe('BugSpotter Initialization Issues', () => {
       const config: BugSpotterConfig = {
         endpoint: 'https://api.example.com',
         showWidget: false,
-        auth: {
-          apiKey: 'test-key',
-        },
+        apiKey: 'test-key',
       };
 
       await BugSpotter.init(config);
@@ -297,9 +279,7 @@ describe('BugSpotter Initialization Issues', () => {
       const config: BugSpotterConfig = {
         endpoint: 'https://api.example.com',
         showWidget: false,
-        auth: {
-          apiKey: 'test-key',
-        },
+        apiKey: 'test-key',
         replay: {
           enabled: false,
         },
@@ -313,9 +293,7 @@ describe('BugSpotter Initialization Issues', () => {
     it('should skip settings fetch when no endpoint provided', async () => {
       const config: BugSpotterConfig = {
         showWidget: false,
-        auth: {
-          apiKey: 'test-key',
-        },
+        apiKey: 'test-key',
       };
 
       await BugSpotter.init(config);

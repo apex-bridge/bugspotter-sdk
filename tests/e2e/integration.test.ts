@@ -85,10 +85,8 @@ describe('E2E Integration Tests', () => {
 
       // 1. INIT - Initialize SDK with full configuration
       const config: BugSpotterConfig = {
-        auth: {
-          apiKey: 'test-api-key',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key',
+        endpoint: 'https://api.example.com',
         showWidget: false,
         replay: { enabled: true, duration: 15 },
         sanitize: { enabled: true, patterns: 'all' },
@@ -154,7 +152,7 @@ describe('E2E Integration Tests', () => {
       // Verify fetch was called (settings + create)
       expect(fetchMock).toHaveBeenCalledTimes(2);
       const call = fetchMock.mock.calls[1]; // Bug report creation is call 1, settings is call 0
-      expect(call[0]).toBe(config.endpoint);
+      expect(call[0]).toBe(config.endpoint + '/api/v1/reports');
 
       // Verify auth header
       const headers = call[1].headers;
@@ -173,10 +171,8 @@ describe('E2E Integration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
       });
 
@@ -224,10 +220,8 @@ describe('E2E Integration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
       });
 
@@ -252,10 +246,8 @@ describe('E2E Integration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
       });
 
@@ -281,10 +273,8 @@ describe('E2E Integration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'invalid-key',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'invalid-key',
+        endpoint: 'https://api.example.com',
         showWidget: false,
         retry: { maxRetries: 0 }, // Disable retries
       });
@@ -309,10 +299,8 @@ describe('E2E Integration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
       });
 
@@ -335,10 +323,8 @@ describe('E2E Integration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
         retry: { maxRetries: 0 }, // Disable retries
       });
@@ -370,10 +356,8 @@ describe('E2E Integration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
         retry: {
           maxRetries: 3,
@@ -407,10 +391,8 @@ describe('E2E Integration Tests', () => {
         });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
         retry: {
           maxRetries: 3,
@@ -432,9 +414,7 @@ describe('E2E Integration Tests', () => {
   describe('PII Sanitization Verification', () => {
     it('should properly redact emails in console logs', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: true, patterns: ['email'] },
       });
@@ -465,9 +445,7 @@ describe('E2E Integration Tests', () => {
 
     it('should properly redact credit cards', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: true, patterns: ['creditcard'] },
       });
@@ -494,9 +472,7 @@ describe('E2E Integration Tests', () => {
 
     it('should properly redact SSNs and IINs', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: true, patterns: ['ssn', 'iin'] },
       });
@@ -523,9 +499,7 @@ describe('E2E Integration Tests', () => {
 
     it('should properly redact IP addresses', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: true, patterns: ['ip'] },
       });
@@ -552,9 +526,7 @@ describe('E2E Integration Tests', () => {
 
     it('should handle multiple PII types simultaneously', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: true, patterns: 'all' },
       });
@@ -586,9 +558,7 @@ describe('E2E Integration Tests', () => {
 
     it('should allow disabling sanitization', async () => {
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
+        apiKey: 'test-api-key-12345',
         showWidget: false,
         sanitize: { enabled: false },
       });
@@ -689,10 +659,8 @@ describe('E2E Integration Tests', () => {
         });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
         retry: {
           maxRetries: 3,
@@ -733,10 +701,8 @@ describe('E2E Integration Tests', () => {
       });
 
       const bugspotter = await BugSpotter.init({
-        auth: {
-          apiKey: 'test-api-key-12345',
-        },
-        endpoint: 'https://api.example.com/bugs',
+        apiKey: 'test-api-key-12345',
+        endpoint: 'https://api.example.com',
         showWidget: false,
         retry: {
           maxRetries: 2,

@@ -31,14 +31,14 @@ describe('Transport - Authentication', () => {
       (global.fetch as any).mockResolvedValueOnce(mockResponse);
 
       const response = await submitWithAuth(
-        'https://api.example.com/bugs',
+        'https://api.example.com/api/v1/reports',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         { auth: TEST_AUTH }
       );
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.example.com/bugs',
+        'https://api.example.com/api/v1/reports',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -54,7 +54,7 @@ describe('Transport - Authentication', () => {
     it('should throw error if auth apiKey is undefined', async () => {
       await expect(
         submitWithAuth(
-          'https://api.example.com/bugs',
+          'https://api.example.com/api/v1/reports',
           JSON.stringify({ test: 'data' }),
           { 'Content-Type': 'application/json' },
           { auth: { apiKey: undefined } } as any
@@ -70,7 +70,7 @@ describe('Transport - Authentication', () => {
       (global.fetch as any).mockResolvedValueOnce(mockResponse);
 
       await submitWithAuth(
-        'https://api.example.com/bugs',
+        'https://api.example.com/api/v1/reports',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         {
@@ -93,7 +93,7 @@ describe('Transport - Authentication', () => {
       (global.fetch as any).mockResolvedValueOnce(mockResponse);
 
       await submitWithAuth(
-        'https://api.example.com/bugs',
+        'https://api.example.com/api/v1/reports',
         JSON.stringify({ test: 'data' }),
         { 'Content-Type': 'application/json' },
         {

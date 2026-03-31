@@ -227,7 +227,7 @@ describe('Presigned URL Upload Performance Tests', () => {
 
   describe('Compression Performance', () => {
     it('should compress large replay data efficiently', async () => {
-      const hasFullBlobAPI = typeof Blob !== 'undefined' && Blob.prototype.hasOwnProperty('stream');
+      const hasFullBlobAPI = typeof Blob !== 'undefined' && 'stream' in Blob.prototype;
       if (!hasFullBlobAPI) {
         console.log('Skipping compression test in jsdom environment');
         return;
@@ -332,7 +332,7 @@ describe('Presigned URL Upload Performance Tests', () => {
     });
 
     it('should handle mixed concurrent uploads (screenshots + replays)', async () => {
-      const hasFullBlobAPI = typeof Blob !== 'undefined' && Blob.prototype.hasOwnProperty('stream');
+      const hasFullBlobAPI = typeof Blob !== 'undefined' && 'stream' in Blob.prototype;
       if (!hasFullBlobAPI) {
         console.log('Skipping mixed upload test in jsdom environment');
         return;

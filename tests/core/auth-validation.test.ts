@@ -9,9 +9,7 @@ describe('BugSpotter - Authentication Validation', () => {
     baseConfig = {
       endpoint: 'https://api.example.com/api/v1/reports',
       showWidget: false,
-      auth: {
-        apiKey: 'test-api-key',
-      },
+      apiKey: 'test-api-key',
     };
   });
 
@@ -45,7 +43,7 @@ describe('BugSpotter - Authentication Validation', () => {
     });
 
     it('should throw if auth is missing', async () => {
-      const config = { ...baseConfig, auth: undefined as any };
+      const config = { ...baseConfig, apiKey: undefined as any };
       const bugSpotter = new BugSpotter(config);
       const report = await bugSpotter.capture();
 
@@ -55,13 +53,13 @@ describe('BugSpotter - Authentication Validation', () => {
           description: 'Test',
           report,
         })
-      ).rejects.toThrow('API key authentication is required');
+      ).rejects.toThrow('API key is required');
     });
 
     it('should throw if apiKey is missing', async () => {
       const config = {
         ...baseConfig,
-        auth: { apiKey: undefined } as any,
+        apiKey: undefined  as any,
       } as any;
       const bugSpotter = new BugSpotter(config);
       const report = await bugSpotter.capture();
@@ -72,13 +70,13 @@ describe('BugSpotter - Authentication Validation', () => {
           description: 'Test',
           report,
         })
-      ).rejects.toThrow('API key is required in auth configuration');
+      ).rejects.toThrow('API key is required');
     });
 
     it('should throw if apiKey is empty string', async () => {
       const config = {
         ...baseConfig,
-        auth: { apiKey: '' } as any,
+        apiKey: ''  as any,
       } as any;
       const bugSpotter = new BugSpotter(config);
       const report = await bugSpotter.capture();
@@ -89,7 +87,7 @@ describe('BugSpotter - Authentication Validation', () => {
           description: 'Test',
           report,
         })
-      ).rejects.toThrow('API key is required in auth configuration');
+      ).rejects.toThrow('API key is required');
     });
   });
 });

@@ -62,6 +62,13 @@ export default [
         Console: 'readonly',
         BlobPart: 'readonly',
         BodyInit: 'readonly',
+        RequestInfo: 'readonly',
+        RequestInit: 'readonly',
+        MutationObserver: 'readonly',
+        MutationRecord: 'readonly',
+        DocumentFragment: 'readonly',
+        performance: 'readonly',
+        atob: 'readonly',
       },
     },
     plugins: {

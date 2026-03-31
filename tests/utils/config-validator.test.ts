@@ -4,30 +4,30 @@ import { validateAuthConfig, validateDeduplicationConfig } from '../../src/utils
 describe('validateAuthConfig', () => {
   it('should throw error when endpoint is missing', () => {
     expect(() => {
-      validateAuthConfig({ auth: { apiKey: 'test' } });
+      validateAuthConfig({ apiKey: 'test'  });
     }).toThrow('No endpoint configured for bug report submission');
   });
 
-  it('should throw error when auth is missing', () => {
+  it('should throw error when apiKey is missing', () => {
     expect(() => {
       validateAuthConfig({ endpoint: 'https://api.example.com' });
-    }).toThrow('API key authentication is required');
+    }).toThrow('API key is required');
   });
 
   it('should throw error when apiKey is missing', () => {
     expect(() => {
       validateAuthConfig({
         endpoint: 'https://api.example.com',
-        auth: { apiKey: '' },
+        apiKey: '' ,
       });
-    }).toThrow('API key is required in auth configuration');
+    }).toThrow('API key is required');
   });
 
   it('should not throw error for valid config', () => {
     expect(() => {
       validateAuthConfig({
         endpoint: 'https://api.example.com',
-        auth: { apiKey: 'test-key' },
+        apiKey: 'test-key' ,
       });
     }).not.toThrow();
   });

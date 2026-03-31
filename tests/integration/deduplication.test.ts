@@ -9,9 +9,7 @@ describe('Deduplication Integration Tests', () => {
 
   const baseConfig: BugSpotterConfig = {
     endpoint: 'https://api.example.com',
-    auth: {
-      apiKey: 'test-key',
-    },
+    apiKey: 'test-key',
     showWidget: false,
     deduplication: {
       enabled: true,
@@ -240,9 +238,7 @@ describe('Deduplication Integration Tests', () => {
     it('should use default config when deduplication not specified', async () => {
       bugSpotter = new BugSpotter({
         endpoint: 'https://api.example.com',
-        auth: {
-          apiKey: 'test-key',
-        },
+        apiKey: 'test-key',
         showWidget: false,
       });
 

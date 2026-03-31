@@ -198,9 +198,7 @@ describe('SDK Presigned URL Upload Flow', () => {
     const sdk = await BugSpotter.init({
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
-      auth: {
-        apiKey: MOCK_API_KEY,
-      },
+      apiKey: MOCK_API_KEY,
       replay: {
         enabled: true,
         duration: 15,
@@ -251,9 +249,7 @@ describe('SDK Presigned URL Upload Flow', () => {
     const sdk = await BugSpotter.init({
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
-      auth: {
-        apiKey: MOCK_API_KEY,
-      },
+      apiKey: MOCK_API_KEY,
       replay: {
         enabled: false,
       },
@@ -307,9 +303,7 @@ describe('SDK Presigned URL Upload Flow', () => {
     const sdk = await BugSpotter.init({
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
-      auth: {
-        apiKey: MOCK_API_KEY,
-      },
+      apiKey: MOCK_API_KEY,
     });
 
     const report = await sdk.capture();
@@ -362,9 +356,7 @@ describe('SDK Presigned URL Upload Flow', () => {
     const sdk = await BugSpotter.init({
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
-      auth: {
-        apiKey: MOCK_API_KEY,
-      },
+      apiKey: MOCK_API_KEY,
       replay: {
         enabled: true,
         duration: 15,
@@ -452,9 +444,7 @@ describe('SDK Presigned URL Upload Flow', () => {
     const sdk = await BugSpotter.init({
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
-      auth: {
-        apiKey: MOCK_API_KEY,
-      },
+      apiKey: MOCK_API_KEY,
       replay: {
         enabled: true,
       },
@@ -506,9 +496,7 @@ describe('SDK Presigned URL Upload Flow', () => {
     const sdk = await BugSpotter.init({
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
-      auth: {
-        apiKey: MOCK_API_KEY,
-      },
+      apiKey: MOCK_API_KEY,
     });
 
     const report = await sdk.capture();
@@ -558,9 +546,7 @@ describe('SDK Presigned URL Upload Flow', () => {
     const sdk = await BugSpotter.init({
       endpoint: MOCK_ENDPOINT,
       showWidget: false,
-      auth: {
-        apiKey: MOCK_API_KEY,
-      },
+      apiKey: MOCK_API_KEY,
     });
 
     const report = await sdk.capture();
@@ -590,8 +576,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       const sdk = await BugSpotter.init({
         endpoint: MOCK_ENDPOINT,
         showWidget: false,
-        // @ts-expect-error - Testing missing auth
-        auth: undefined,
+        apiKey: undefined as any,
         replay: { enabled: true },
       });
 
@@ -605,14 +590,14 @@ describe('SDK Presigned URL Upload Flow', () => {
           description: 'Testing missing auth',
           report,
         })
-      ).rejects.toThrow('API key authentication is required');
+      ).rejects.toThrow('API key is required');
     });
 
     it('should throw error when auth is missing apiKey', async () => {
       const sdk = await BugSpotter.init({
         endpoint: MOCK_ENDPOINT,
         showWidget: false,
-        auth: { apiKey: '' } as any,
+        apiKey: ''  as any,
         replay: { enabled: true },
       });
 
@@ -624,7 +609,7 @@ describe('SDK Presigned URL Upload Flow', () => {
           description: 'Testing missing apiKey',
           report,
         })
-      ).rejects.toThrow('API key is required in auth configuration');
+      ).rejects.toThrow('API key is required');
     });
 
     it('should throw error when apiKey is missing', async () => {
@@ -638,10 +623,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       const sdk = await BugSpotter.init({
         endpoint: MOCK_ENDPOINT,
         showWidget: false,
-        auth: {
-          // @ts-expect-error - Testing missing apiKey
-          apiKey: undefined,
-        },
+        apiKey: undefined as any,
         replay: { enabled: true },
       });
 
@@ -654,7 +636,7 @@ describe('SDK Presigned URL Upload Flow', () => {
           description: 'Testing missing apiKey',
           report,
         })
-      ).rejects.toThrow('API key is required in auth configuration');
+      ).rejects.toThrow('API key is required');
     });
 
     it('should throw error when screenshot upload fails', async () => {
@@ -713,9 +695,7 @@ describe('SDK Presigned URL Upload Flow', () => {
       const sdk = await BugSpotter.init({
         endpoint: MOCK_ENDPOINT,
         showWidget: false,
-        auth: {
-          apiKey: MOCK_API_KEY,
-        },
+        apiKey: MOCK_API_KEY,
         replay: { enabled: true },
       });
 

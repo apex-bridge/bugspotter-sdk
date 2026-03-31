@@ -12,9 +12,7 @@ describe('Replay Quality Settings Integration', () => {
   const baseConfig: BugSpotterConfig = {
     endpoint: mockEndpoint,
     showWidget: false,
-    auth: {
-      apiKey: 'bgs_test_key',
-    },
+    apiKey: 'bgs_test_key',
     replay: {
       enabled: true,
       duration: 15,
@@ -89,8 +87,7 @@ describe('Replay Quality Settings Integration', () => {
         },
       };
 
-      // @ts-expect-error - Testing without required auth config
-      await BugSpotter.init(configWithoutApiKey);
+      await BugSpotter.init(configWithoutApiKey as BugSpotterConfig);
 
       // Should NOT call fetch without API key (security: don't leak endpoint existence)
       expect(fetchSpy).not.toHaveBeenCalled();

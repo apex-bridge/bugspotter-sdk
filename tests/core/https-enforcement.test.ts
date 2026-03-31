@@ -8,9 +8,9 @@ const TEST_AUTH: AuthConfig = {
   apiKey: 'test-api-key',
 };
 
-const INSECURE_ENDPOINT = 'http://api.example.com/bugs';
+const INSECURE_ENDPOINT = 'http://api.example.com';
 const LOCALHOST_ENDPOINT = 'http://localhost:3000/bugs';
-const SECURE_ENDPOINT = 'https://api.example.com/bugs';
+const SECURE_ENDPOINT = 'https://api.example.com';
 
 describe('HTTPS Enforcement', () => {
   describe('validateAuthConfig', () => {
@@ -18,7 +18,7 @@ describe('HTTPS Enforcement', () => {
       expect(() =>
         validateAuthConfig({
           endpoint: INSECURE_ENDPOINT,
-          auth: TEST_AUTH,
+          apiKey: TEST_AUTH.apiKey,
         })
       ).toThrow(InsecureEndpointError);
     });
@@ -27,7 +27,7 @@ describe('HTTPS Enforcement', () => {
       expect(() =>
         validateAuthConfig({
           endpoint: SECURE_ENDPOINT,
-          auth: TEST_AUTH,
+          apiKey: TEST_AUTH.apiKey,
         })
       ).not.toThrow();
     });
@@ -36,7 +36,7 @@ describe('HTTPS Enforcement', () => {
       expect(() =>
         validateAuthConfig({
           endpoint: LOCALHOST_ENDPOINT,
-          auth: TEST_AUTH,
+          apiKey: TEST_AUTH.apiKey,
         })
       ).not.toThrow();
     });

@@ -4,10 +4,10 @@ import { BugReportModal } from './widget/modal';
 import type { eventWithTime } from '@rrweb/types';
 import { createSanitizer, type Sanitizer } from './utils/sanitize';
 import { getLogger } from './utils/logger';
-import type { AuthConfig, RetryConfig } from './core/transport';
+import type { RetryConfig } from './core/transport';
 import type { OfflineConfig } from './core/offline-queue';
 import { DEFAULT_REPLAY_DURATION_SECONDS } from './constants';
-import { getApiBaseUrl } from './utils/url-helpers';
+import { getApiBaseUrl, isSecureEndpoint } from './utils/url-helpers';
 import { VERSION } from './version';
 import { type DeduplicationConfig } from './utils/deduplicator';
 import { validateDeduplicationConfig } from './utils/config-validator';
@@ -254,15 +254,19 @@ export class BugSpotter {
     let backendSettings: ReplayQualitySettings | null = null;
     const replayEnabled = config.replay?.enabled ?? true;
     if (replayEnabled && config.endpoint) {
-      // Validate auth is configured before attempting fetch
-      if (!config.auth?.apiKey) {
+      // SECURITY: Don't send API key over insecure connection
+      if (!isSecureEndpoint(config.endpoint)) {
+        logger.warn(
+          'Insecure endpoint — skipping backend settings fetch to protect API key.'
+        );
+      } else if (!config.apiKey) {
         logger.warn(
           'Endpoint provided but no API key configured. Skipping backend settings fetch.'
         );
       } else {
         backendSettings = await fetchReplaySettings(
           config.endpoint,
-          config.auth.apiKey
+          config.apiKey
         );
       }
     }
@@ -339,15 +343,14 @@ export class BugSpotter {
 }
 
 export interface BugSpotterConfig {
+  /** Base URL of BugSpotter API (e.g., https://api.example.com). SDK appends paths internally. */
   endpoint?: string;
+
+  /** API key for authentication (starts with 'bgs_'). Required. */
+  apiKey: string;
+
   showWidget?: boolean;
   widgetOptions?: FloatingButtonOptions;
-
-  /**
-   * Authentication configuration (required)
-   * API key authentication with project ID
-   */
-  auth: AuthConfig;
 
   /** Retry configuration for failed requests */
   retry?: RetryConfig;
@@ -471,11 +474,7 @@ export {
   getAuthHeaders,
   clearOfflineQueue,
 } from './core/transport';
-export type {
-  AuthConfig,
-  TransportOptions,
-  RetryConfig,
-} from './core/transport';
+export type { TransportOptions, RetryConfig } from './core/transport';
 export type { OfflineConfig } from './core/offline-queue';
 export type { Logger, LogLevel, LoggerConfig } from './utils/logger';
 export { getLogger, configureLogger, createLogger } from './utils/logger';

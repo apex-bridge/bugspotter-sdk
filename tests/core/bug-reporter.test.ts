@@ -25,10 +25,8 @@ describe('BugReporter', () => {
   });
 
   const createConfig = (overrides?: Partial<BugSpotterConfig>): BugSpotterConfig => ({
-    endpoint: 'https://api.example.com/bugs',
-    auth: {
-      apiKey: 'test-key',
-    },
+    endpoint: 'https://api.example.com',
+    apiKey: 'test-key',
     deduplication: {
       enabled: false, // Disable for most tests
     },

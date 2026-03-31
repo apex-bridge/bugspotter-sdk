@@ -470,10 +470,7 @@ export {
   getAuthHeaders,
   clearOfflineQueue,
 } from './core/transport';
-export type {
-  TransportOptions,
-  RetryConfig,
-} from './core/transport';
+export type { TransportOptions, RetryConfig } from './core/transport';
 export type { OfflineConfig } from './core/offline-queue';
 export type { Logger, LogLevel, LoggerConfig } from './utils/logger';
 export { getLogger, configureLogger, createLogger } from './utils/logger';

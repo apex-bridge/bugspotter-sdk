@@ -23,7 +23,7 @@ pnpm add @bugspotter/sdk
 
 ```html
 <!-- BugSpotter CDN (versioned - recommended for production) -->
-<script src="https://cdn.bugspotter.io/sdk/bugspotter-1.0.0.min.js"></script>
+<script src="https://cdn.bugspotter.io/sdk/bugspotter-2.0.0.min.js"></script>
 
 <!-- Latest version (for development only) -->
 <script src="https://cdn.bugspotter.io/sdk/bugspotter-latest.min.js"></script>
@@ -57,12 +57,8 @@ import BugSpotter from '@bugspotter/sdk';
 
 // Initialize with auto-widget (note: init is async)
 const bugSpotter = await BugSpotter.init({
-  endpoint: 'https://api.bugspotter.com/api/v1/reports',
-  auth: {
-    type: 'api-key',
-    apiKey: 'bgs_your_api_key',
-    projectId: 'your-project-uuid',
-  },
+  endpoint: 'https://api.bugspotter.com',
+  apiKey: 'bgs_your_api_key',
   showWidget: true,
 });
 ```
@@ -73,12 +69,8 @@ const bugSpotter = await BugSpotter.init({
 const BugSpotter = require('@bugspotter/sdk');
 
 const bugSpotter = await BugSpotter.init({
-  endpoint: 'https://api.bugspotter.com/api/v1/reports',
-  auth: {
-    type: 'api-key',
-    apiKey: 'bgs_your_api_key',
-    projectId: 'your-project-uuid',
-  },
+  endpoint: 'https://api.bugspotter.com',
+  apiKey: 'bgs_your_api_key',
   showWidget: true,
 });
 ```
@@ -91,12 +83,8 @@ const bugSpotter = await BugSpotter.init({
   // Initialize with auto-widget
   (async () => {
     const bugSpotter = await BugSpotter.init({
-      endpoint: 'https://api.bugspotter.com/api/v1/reports',
-      auth: {
-        type: 'api-key',
-        apiKey: 'bgs_your_api_key',
-        projectId: 'your-project-uuid',
-      },
+      endpoint: 'https://api.bugspotter.com',
+  apiKey: 'bgs_your_api_key',
       showWidget: true,
     });
   })();
@@ -112,12 +100,8 @@ import BugSpotter from '@bugspotter/sdk';
 
 // 1. Initialize SDK with required auth
 const bugSpotter = await BugSpotter.init({
-  endpoint: 'https://api.bugspotter.com/api/v1/reports',
-  auth: {
-    type: 'api-key',
-    apiKey: 'bgs_your_api_key',
-    projectId: 'your-project-uuid', // Required for file uploads
-  },
+  endpoint: 'https://api.bugspotter.com',
+  apiKey: 'bgs_your_api_key',
   showWidget: true,
 });
 
@@ -142,12 +126,8 @@ const bugSpotter = await BugSpotter.init({
 ```javascript
 // Initialize without widget
 const bugSpotter = await BugSpotter.init({
-  endpoint: 'https://api.bugspotter.com/api/v1/reports',
-  auth: {
-    type: 'api-key',
-    apiKey: 'bgs_your_api_key',
-    projectId: 'your-project-uuid',
-  },
+  endpoint: 'https://api.bugspotter.com',
+  apiKey: 'bgs_your_api_key',
   showWidget: false,
 });
 
@@ -177,12 +157,8 @@ await bugSpotter.submit({
 ```javascript
 // Widget appears automatically with showWidget: true
 const bugSpotter = await BugSpotter.init({
-  endpoint: 'https://api.bugspotter.com/api/v1/reports',
-  auth: {
-    type: 'api-key',
-    apiKey: 'bgs_your_api_key',
-    projectId: 'your-project-uuid',
-  },
+  endpoint: 'https://api.bugspotter.com',
+  apiKey: 'bgs_your_api_key',
   showWidget: true,
   widgetOptions: {
     position: 'bottom-right',
@@ -283,13 +259,8 @@ Initialize the SDK. **This method is async** to support fetching backend-control
 
 ```typescript
 interface BugSpotterConfig {
-  endpoint: string; // Required: Backend API URL
-  auth: {
-    // Required: Authentication configuration
-    type: 'api-key';
-    apiKey: string; // API key (bgs_...)
-    projectId: string; // Project UUID (required for file uploads)
-  };
+  apiKey: string; // Required: API key (bgs_...)
+  endpoint?: string; // Base URL of BugSpotter API (e.g., https://api.example.com)
   showWidget?: boolean; // Auto-show widget (default: true)
   widgetOptions?: FloatingButtonOptions;
   replay?: {
@@ -492,7 +463,6 @@ new DirectUploader(config: DirectUploadConfig)
 interface DirectUploadConfig {
   apiEndpoint: string;    // Backend API URL
   apiKey: string;         // bgs_... API key
-  projectId: string;      // Project UUID
   bugId: string;         // Bug report UUID
 }
 ```

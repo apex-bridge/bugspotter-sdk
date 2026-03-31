@@ -1101,4 +1101,4 @@ script-src 'self';
 
 ---
 
-**Need Help?** Open an issue on [GitHub](https://github.com/apexbridge-tech/bugspotter) or contact support.
+**Need Help?** Open an issue on [GitHub](https://github.com/apex-bridge/bugspotter-sdk) or contact support.

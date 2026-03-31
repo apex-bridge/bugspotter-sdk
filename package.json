@@ -56,12 +56,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/apexbridge-tech/bugspotter-sdk.git"
+    "url": "https://github.com/apex-bridge/bugspotter-sdk.git"
   },
   "bugs": {
-    "url": "https://github.com/apexbridge-tech/bugspotter-sdk/issues"
+    "url": "https://github.com/apex-bridge/bugspotter-sdk/issues"
   },
-  "homepage": "https://github.com/apexbridge-tech/bugspotter-sdk#readme",
+  "homepage": "https://github.com/apex-bridge/bugspotter-sdk#readme",
   "engines": {
     "node": ">=16.0.0"
   },

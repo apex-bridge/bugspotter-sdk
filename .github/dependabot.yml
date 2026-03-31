@@ -9,9 +9,9 @@ updates:
       time: "09:00"
     open-pull-requests-limit: 10
     reviewers:
-      - "apexbridge-tech"
+      - "apex-bridge/devs"
     assignees:
-      - "apexbridge-tech"
+      - "alex-budanov"
     labels:
       - "dependencies"
       - "core"
@@ -28,9 +28,9 @@ updates:
       time: "09:00"
     open-pull-requests-limit: 5
     reviewers:
-      - "apexbridge-tech"
+      - "apex-bridge/devs"
     assignees:
-      - "apexbridge-tech"
+      - "alex-budanov"
     labels:
       - "dependencies"
       - "workspace"
@@ -47,9 +47,9 @@ updates:
       time: "09:00"
     open-pull-requests-limit: 5
     reviewers:
-      - "apexbridge-tech"
+      - "apex-bridge/devs"
     assignees:
-      - "apexbridge-tech"
+      - "alex-budanov"
     labels:
       - "dependencies"
       - "examples"
@@ -66,9 +66,9 @@ updates:
       time: "09:00"
     open-pull-requests-limit: 5
     reviewers:
-      - "apexbridge-tech"
+      - "apex-bridge/devs"
     assignees:
-      - "apexbridge-tech"
+      - "alex-budanov"
     labels:
       - "dependencies"
       - "examples"
@@ -85,9 +85,9 @@ updates:
       time: "10:00"
     open-pull-requests-limit: 3
     reviewers:
-      - "apexbridge-tech"
+      - "apex-bridge/devs"
     assignees:
-      - "apexbridge-tech"
+      - "alex-budanov"
     labels:
       - "dependencies"
       - "ci/cd"

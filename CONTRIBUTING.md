@@ -190,9 +190,9 @@ pnpm build   # Production build
 
 ## Getting Help
 
-- **Questions**: Open a [Discussion](https://github.com/apexbridge-tech/bugspotter-sdk/discussions)
-- **Bugs**: Open an [Issue](https://github.com/apexbridge-tech/bugspotter-sdk/issues) with the bug template
-- **Features**: Open an [Issue](https://github.com/apexbridge-tech/bugspotter-sdk/issues) with the feature template
+- **Questions**: Open a [Discussion](https://github.com/apex-bridge/bugspotter-sdk/discussions)
+- **Bugs**: Open an [Issue](https://github.com/apex-bridge/bugspotter-sdk/issues) with the bug template
+- **Features**: Open an [Issue](https://github.com/apex-bridge/bugspotter-sdk/issues) with the feature template
 - **Security**: Email security@apexbridge.tech
 
 ## License

@@ -140,7 +140,7 @@ If our primary CDN is unavailable, you can also use:
 Check available versions:
 
 - [npm package page](https://www.npmjs.com/package/@bugspotter/sdk?activeTab=versions)
-- [GitHub releases](https://github.com/apexbridge-tech/bugspotter/releases)
+- [GitHub releases](https://github.com/apex-bridge/bugspotter-sdk/releases)
 
 ## ⚙️ Configuration
 
@@ -208,6 +208,6 @@ If updates aren't showing:
 
 ## 🆘 Support
 
-- **Issues:** [GitHub Issues](https://github.com/apexbridge-tech/bugspotter/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/apexbridge-tech/bugspotter/discussions)
+- **Issues:** [GitHub Issues](https://github.com/apex-bridge/bugspotter-sdk/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/apex-bridge/bugspotter-sdk/discussions)
 - **Security:** security@bugspotter.io

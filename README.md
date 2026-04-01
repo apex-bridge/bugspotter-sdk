@@ -38,8 +38,8 @@ pnpm add @bugspotter/sdk
 
 ```bash
 # Clone and build from source
-git clone https://github.com/apexbridge-tech/bugspotter.git
-cd bugspotter/packages/sdk
+git clone https://github.com/apex-bridge/bugspotter-sdk.git
+cd bugspotter-sdk
 pnpm install
 pnpm build
 ```

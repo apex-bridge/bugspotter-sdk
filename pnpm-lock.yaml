@@ -12,8 +12,8 @@ importers:
         specifier: ^1.0.1
         version: 1.0.2
       '@rrweb/types':
-        specifier: 2.0.0-alpha.18
-        version: 2.0.0-alpha.18
+        specifier: 2.0.0-alpha.20
+        version: 2.0.0-alpha.20
       html-to-image:
         specifier: ^1.11.13
         version: 1.11.13
@@ -602,8 +602,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@rrweb/types@2.0.0-alpha.18':
-    resolution: {integrity: sha512-iMH3amHthJZ9x3gGmBPmdfim7wLGygC2GciIkw2A6SO8giSn8PHYtRT8OKNH4V+k3SZ6RSnYHcTQxBA7pSWZ3Q==}
+  '@rrweb/types@2.0.0-alpha.20':
+    resolution: {integrity: sha512-RbnDgKxA/odwB1R4gF7eUUj+rdSrq6ROQJsnMw7MIsGzlbSYvJeZN8YY4XqU0G6sKJvXI6bSzk7w/G94jNwzhw==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -2683,7 +2683,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.59.0':
     optional: true
 
-  '@rrweb/types@2.0.0-alpha.18': {}
+  '@rrweb/types@2.0.0-alpha.20': {}
 
   '@types/chai@5.2.3':
     dependencies:
@@ -4010,7 +4010,7 @@ snapshots:
 
   rrweb@2.0.0-alpha.4:
     dependencies:
-      '@rrweb/types': 2.0.0-alpha.18
+      '@rrweb/types': 2.0.0-alpha.20
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.6.5
       base64-arraybuffer: 1.0.2

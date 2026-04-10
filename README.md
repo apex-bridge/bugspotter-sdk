@@ -84,7 +84,7 @@ const bugSpotter = await BugSpotter.init({
   (async () => {
     const bugSpotter = await BugSpotter.init({
       endpoint: 'https://api.bugspotter.com',
-  apiKey: 'bgs_your_api_key',
+      apiKey: 'bgs_your_api_key',
       showWidget: true,
     });
   })();
@@ -230,22 +230,84 @@ button.setBackgroundColor('#00ff00');
 
 ## 🔒 PII Sanitization
 
-Automatic detection and masking of sensitive data before submission.
+Automatic detection and masking of sensitive data **in the browser before upload**. Your servers never see raw PII.
 
-**Built-in patterns:** Email, phone, credit card, SSN, Kazakhstan IIN, IP address
+### Built-in Patterns (9 types)
+
+| Pattern      | Detects                   | Example                                         |
+| ------------ | ------------------------- | ----------------------------------------------- |
+| `email`      | Email addresses           | `user@example.com` → `[REDACTED-EMAIL]`         |
+| `phone`      | Phone numbers             | `+7 701 123-4567` → `[REDACTED-PHONE]`          |
+| `creditcard` | Credit card numbers       | `4111-1111-1111-1111` → `[REDACTED-CREDITCARD]` |
+| `ssn`        | US Social Security        | `123-45-6789` → `[REDACTED-SSN]`                |
+| `iin`        | Kazakhstan IIN/BIN        | `860101350478` → `[REDACTED-IIN]`               |
+| `ip`         | IPv4 and IPv6             | `192.168.1.1` → `[REDACTED-IP]`                 |
+| `apikey`     | Stripe, AWS, Google keys  | `sk_live_...` → `[REDACTED-APIKEY]`             |
+| `token`      | Bearer, JWT, OAuth tokens | `eyJhbG...` → `[REDACTED-TOKEN]`                |
+| `password`   | Password field values     | `••••••••` → `[REDACTED-PASSWORD]`              |
+
+### Presets
+
+Use a preset name instead of listing patterns individually:
+
+| Preset             | Patterns included       |
+| ------------------ | ----------------------- |
+| `'all'`            | All 9 patterns          |
+| `'minimal'`        | email, creditcard, ssn  |
+| `'financial'`      | creditcard, ssn         |
+| `'contact'`        | email, phone            |
+| `'identification'` | ssn, iin                |
+| `'kazakhstan'`     | email, phone, iin       |
+| `'gdpr'`           | email, phone, ip        |
+| `'pci'`            | creditcard              |
+| `'credentials'`    | apikey, token, password |
+
+```javascript
+// Use a preset
+await BugSpotter.init({
+  sanitize: { patterns: 'kazakhstan' }, // email + phone + IIN
+});
+
+// Or pick individual patterns
+await BugSpotter.init({
+  sanitize: { patterns: ['email', 'phone', 'creditcard'] },
+});
+```
+
+### Custom Patterns
+
+Add your own regex patterns for industry-specific data:
 
 ```javascript
 await BugSpotter.init({
   sanitize: {
-    enabled: true, // Default
-    patterns: ['email', 'phone', 'creditcard'],
-    customPatterns: [{ name: 'api-key', regex: /API[-_]KEY:\s*[\w-]{20,}/gi }],
-    excludeSelectors: ['.public-email'],
+    enabled: true,
+    patterns: 'all',
+    customPatterns: [
+      {
+        name: 'broker-account',
+        regex: /FRH\d{9}/gi,
+        description: 'Freedom Finance broker account number',
+      },
+      {
+        name: 'iban-kz',
+        regex: /KZ\d{2}[A-Z]{4}\d{13}/gi,
+        description: 'Kazakhstan IBAN',
+      },
+      {
+        name: 'internal-id',
+        regex: /ORD-\d{6,}/gi,
+        description: 'Internal order ID',
+      },
+    ],
+    excludeSelectors: ['.public-info'], // Don't redact inside these elements
   },
 });
 ```
 
-**Performance:** <10ms overhead, supports Cyrillic text
+Custom patterns produce `[REDACTED-BROKER-ACCOUNT]`, `[REDACTED-IBAN-KZ]`, etc.
+
+**Performance:** < 50ms overhead, recursive sanitization of nested objects, supports Cyrillic text
 
 ## 📋 API Reference
 
@@ -260,35 +322,41 @@ Initialize the SDK. **This method is async** to support fetching backend-control
 ```typescript
 interface BugSpotterConfig {
   apiKey: string; // Required: API key (bgs_...)
-  endpoint?: string; // Base URL of BugSpotter API (e.g., https://api.example.com)
+  endpoint?: string; // Base URL of BugSpotter API
+  sampleRate?: number; // Session sampling (0-1, default: 1 = all sessions)
   showWidget?: boolean; // Auto-show widget (default: true)
   widgetOptions?: FloatingButtonOptions;
   replay?: {
-    // Session replay configuration
     enabled?: boolean; // Enable replay (default: true)
     duration?: number; // Buffer duration in seconds (default: 15)
     sampling?: {
       mousemove?: number; // Mousemove throttle in ms (default: 50)
       scroll?: number; // Scroll throttle in ms (default: 100)
     };
+    blockSelectors?: string[]; // CSS selectors to exclude from replay
+    blockClass?: string; // CSS class to exclude from replay
     // Quality settings (optional, backend controlled by default)
-    inlineStylesheet?: boolean; // Inline CSS stylesheets (default: backend controlled)
-    inlineImages?: boolean; // Inline images (default: backend controlled)
-    collectFonts?: boolean; // Collect fonts (default: backend controlled)
-    recordCanvas?: boolean; // Record canvas elements (default: backend controlled)
-    recordCrossOriginIframes?: boolean; // Record cross-origin iframes (default: backend controlled)
+    inlineStylesheet?: boolean;
+    inlineImages?: boolean;
+    collectFonts?: boolean;
+    recordCanvas?: boolean;
+    recordCrossOriginIframes?: boolean;
   };
   sanitize?: {
-    // PII sanitization configuration
     enabled?: boolean; // Enable PII sanitization (default: true)
-    patterns?: Array<
-      // PII patterns to detect
-      'email' | 'phone' | 'creditcard' | 'ssn' | 'iin' | 'ip' | 'custom'
-    >;
+    patterns?:
+      | 'all'
+      | 'minimal'
+      | 'financial'
+      | 'gdpr'
+      | 'pci'
+      | 'kazakhstan'
+      | Array<'email' | 'phone' | 'creditcard' | 'ssn' | 'iin' | 'ip'>;
     customPatterns?: Array<{
-      // Custom regex patterns
       name: string; // Pattern name for [REDACTED-NAME]
       regex: RegExp; // Detection regex
+      description?: string; // Human-readable description
+      priority?: number; // Higher = checked first
     }>;
     excludeSelectors?: string[]; // CSS selectors to exclude from sanitization
   };
@@ -477,7 +545,9 @@ Upload screenshot directly to storage.
 const screenshotBlob = await fetch(dataUrl).then((r) => r.blob());
 
 const result = await uploader.uploadScreenshot(screenshotBlob, (progress) => {
-  console.log(`Screenshot: ${progress.loaded}/${progress.total} (${progress.percentage}%)`);
+  console.log(
+    `Screenshot: ${progress.loaded}/${progress.total} (${progress.percentage}%)`
+  );
 });
 
 // result: { success: true, storageKey: "screenshots/..." }

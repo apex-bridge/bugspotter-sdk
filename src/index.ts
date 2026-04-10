@@ -209,9 +209,6 @@ export class BugSpotter {
       replay: config.replay,
     });
 
-    // Initialize bug reporter
-    this.bugReporter = new BugReporter(config);
-
     // Initialize widget (enabled by default)
     const widgetEnabled = config.showWidget ?? true;
     if (widgetEnabled) {
@@ -260,8 +257,9 @@ export class BugSpotter {
     config: BugSpotterConfig
   ): Promise<BugSpotter> {
     // Check sampling rate — if this session is not sampled, disable all capture
-    if (typeof config.sampleRate === 'number') {
+    if (config.sampleRate !== undefined) {
       if (
+        typeof config.sampleRate !== 'number' ||
         !Number.isFinite(config.sampleRate) ||
         config.sampleRate < 0 ||
         config.sampleRate > 1
@@ -320,8 +318,19 @@ export class BugSpotter {
 
   async capture(): Promise<BugReport> {
     if (!this.captureManager) {
-      // Unsampled session — return empty report
-      return { console: [], network: [], metadata: {} as BrowserMetadata };
+      // Unsampled session — return minimal valid report
+      return {
+        console: [],
+        network: [],
+        metadata: {
+          userAgent: navigator.userAgent,
+          url: window.location.href,
+          timestamp: Date.now(),
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          browser: 'unknown',
+          os: 'unknown',
+        },
+      };
     }
     return await this.captureManager.captureAll();
   }

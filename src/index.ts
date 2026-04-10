@@ -171,7 +171,7 @@ export class BugSpotter {
   private config: Readonly<BugSpotterConfig>;
   private widget?: FloatingButton;
   private sanitizer?: Sanitizer;
-  private captureManager: CaptureManager;
+  private captureManager?: CaptureManager;
   private bugReporter: BugReporter;
   private _sampled: boolean;
 
@@ -183,11 +183,11 @@ export class BugSpotter {
 
     this.config = config;
     this._sampled = sampled;
+    this.bugReporter = new BugReporter(config);
 
-    // If not sampled, create minimal no-op instance — zero overhead
+    // If not sampled, skip all capture initialization — true zero overhead
+    // No console/network interception, no DOM recording, no widget
     if (!sampled) {
-      this.captureManager = new CaptureManager({ replay: { enabled: false } });
-      this.bugReporter = new BugReporter(config);
       return;
     }
 
@@ -319,6 +319,10 @@ export class BugSpotter {
   }
 
   async capture(): Promise<BugReport> {
+    if (!this.captureManager) {
+      // Unsampled session — return empty report
+      return { console: [], network: [], metadata: {} as BrowserMetadata };
+    }
     return await this.captureManager.captureAll();
   }
 
@@ -363,7 +367,7 @@ export class BugSpotter {
   }
 
   destroy(): void {
-    this.captureManager.destroy();
+    this.captureManager?.destroy();
     this.widget?.destroy();
     this.bugReporter.destroy();
     BugSpotter.instance = undefined;

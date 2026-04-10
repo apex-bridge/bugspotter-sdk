@@ -834,6 +834,47 @@ describe('BugSpotter', () => {
       bugspotter.destroy();
     });
 
+    it('should not intercept console or fetch when not sampled', async () => {
+      // Save original references
+      const originalConsoleLog = console.log;
+      const originalFetch = globalThis.fetch;
+
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        sampleRate: 0,
+      });
+
+      // Console and fetch should NOT be monkey-patched
+      expect(console.log).toBe(originalConsoleLog);
+      expect(globalThis.fetch).toBe(originalFetch);
+
+      // Capture should return empty report
+      const report = await bugspotter.capture();
+      expect(report.console).toEqual([]);
+      expect(report.network).toEqual([]);
+
+      bugspotter.destroy();
+    });
+
+    it('should not create widget when not sampled', async () => {
+      const initialWidgetCount = document.querySelectorAll(
+        'button[style*="position: fixed"]'
+      ).length;
+
+      await BugSpotter.init({
+        apiKey: '',
+        sampleRate: 0,
+        showWidget: true, // Explicitly enabled — but should be ignored when not sampled
+      });
+
+      const finalWidgetCount = document.querySelectorAll(
+        'button[style*="position: fixed"]'
+      ).length;
+      expect(finalWidgetCount).toBe(initialWidgetCount);
+
+      BugSpotter.getInstance()?.destroy();
+    });
+
     it('should throw when sampleRate is negative', async () => {
       await expect(
         BugSpotter.init({ apiKey: '', sampleRate: -0.1 })

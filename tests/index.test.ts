@@ -805,4 +805,120 @@ describe('BugSpotter', () => {
       bugspotter.destroy();
     });
   });
+
+  describe('Sample Rate', () => {
+    it('should initialize normally when sampleRate is 1', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        sampleRate: 1,
+      });
+      expect(bugspotter).toBeDefined();
+      // Replay should be enabled (default)
+      expect(bugspotter.getConfig().replay?.enabled).not.toBe(false);
+      bugspotter.destroy();
+    });
+
+    it('should initialize in inactive mode when sampleRate is 0', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        sampleRate: 0,
+      });
+      expect(bugspotter).toBeDefined();
+      // Replay should be disabled (sampled out)
+      expect(bugspotter.getConfig().replay?.enabled).toBe(false);
+      // Widget should be disabled
+      expect(bugspotter.getConfig().showWidget).toBe(false);
+      bugspotter.destroy();
+    });
+
+    it('should throw when sampleRate is negative', async () => {
+      await expect(
+        BugSpotter.init({ apiKey: '', sampleRate: -0.1 })
+      ).rejects.toThrow('sampleRate must be between 0 and 1');
+    });
+
+    it('should throw when sampleRate is greater than 1', async () => {
+      await expect(
+        BugSpotter.init({ apiKey: '', sampleRate: 1.5 })
+      ).rejects.toThrow('sampleRate must be between 0 and 1');
+    });
+
+    it('should respect sampleRate probability', async () => {
+      // Mock Math.random to control sampling
+      const mockRandom = vi.spyOn(Math, 'random');
+
+      // Session sampled in (random < sampleRate)
+      mockRandom.mockReturnValueOnce(0.05);
+      const sampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
+      expect(sampled.getConfig().replay?.enabled).not.toBe(false);
+      sampled.destroy();
+
+      // Session sampled out (random >= sampleRate)
+      mockRandom.mockReturnValueOnce(0.15);
+      const notSampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
+      expect(notSampled.getConfig().replay?.enabled).toBe(false);
+      notSampled.destroy();
+
+      mockRandom.mockRestore();
+    });
+
+    it('should not have sampleRate affect init when not set', async () => {
+      const bugspotter = await BugSpotter.init({ apiKey: '' });
+      expect(bugspotter).toBeDefined();
+      expect(bugspotter.getConfig().replay?.enabled).not.toBe(false);
+      bugspotter.destroy();
+    });
+  });
+
+  describe('Block Selectors', () => {
+    it('should accept blockSelectors in replay config', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        replay: {
+          blockSelectors: ['.portfolio-table', '#balance-widget'],
+        },
+      });
+      expect(bugspotter.getConfig().replay?.blockSelectors).toEqual([
+        '.portfolio-table',
+        '#balance-widget',
+      ]);
+      bugspotter.destroy();
+    });
+
+    it('should accept blockClass in replay config', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        replay: {
+          blockClass: 'bugspotter-block',
+        },
+      });
+      expect(bugspotter.getConfig().replay?.blockClass).toBe(
+        'bugspotter-block'
+      );
+      bugspotter.destroy();
+    });
+
+    it('should accept both blockSelectors and blockClass', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        replay: {
+          blockSelectors: ['.secret'],
+          blockClass: 'no-record',
+        },
+      });
+      const config = bugspotter.getConfig();
+      expect(config.replay?.blockSelectors).toEqual(['.secret']);
+      expect(config.replay?.blockClass).toBe('no-record');
+      bugspotter.destroy();
+    });
+
+    it('should work without blockSelectors (undefined)', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        replay: { enabled: true },
+      });
+      expect(bugspotter.getConfig().replay?.blockSelectors).toBeUndefined();
+      bugspotter.destroy();
+    });
+  });
 });

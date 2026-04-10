@@ -118,7 +118,7 @@ class StringSanitizer {
  * Value Sanitizer - SRP: Handles recursive object/array traversal
  */
 class ValueSanitizer {
-  private seen = new WeakSet();
+  private readonly seen = new WeakSet<object>();
 
   constructor(private stringSanitizer: StringSanitizer) {}
 

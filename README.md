@@ -230,7 +230,7 @@ button.setBackgroundColor('#00ff00');
 
 ## 🔒 PII Sanitization
 
-Automatic detection and masking of sensitive data **in the browser before upload**. When enabled (default), your servers never see raw PII.
+Automatic detection and masking of sensitive text data **in the browser before upload**. When enabled (default), text fields (console logs, network URLs, metadata) are sanitized before submission. Screenshots and replay visuals require `blockSelectors` or `data-bugspotter-exclude` for element-level exclusion.
 
 ### Built-in Patterns (9 types)
 
@@ -245,8 +245,6 @@ Automatic detection and masking of sensitive data **in the browser before upload
 | `apikey`     | Stripe, AWS, Google keys  | `sk_live_...` → `[REDACTED-APIKEY]`             |
 | `token`      | Bearer, JWT, OAuth tokens | `eyJhbG...` → `[REDACTED-TOKEN]`                |
 | `password`   | Password field values     | `••••••••` → `[REDACTED-PASSWORD]`              |
-
-> **Note:** `apikey`, `token`, and `password` are available via presets (`'all'`, `'credentials'`) but not as individual array values in the `patterns` option. Use `patterns: 'all'` or `patterns: 'credentials'` to enable them.
 
 ### Presets
 

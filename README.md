@@ -230,7 +230,7 @@ button.setBackgroundColor('#00ff00');
 
 ## 🔒 PII Sanitization
 
-Automatic detection and masking of sensitive data **in the browser before upload**. Your servers never see raw PII.
+Automatic detection and masking of sensitive data **in the browser before upload**. When enabled (default), your servers never see raw PII.
 
 ### Built-in Patterns (9 types)
 
@@ -348,14 +348,20 @@ interface BugSpotterConfig {
       | 'all'
       | 'minimal'
       | 'financial'
+      | 'contact'
+      | 'identification'
+      | 'credentials'
+      | 'kazakhstan'
       | 'gdpr'
       | 'pci'
-      | 'kazakhstan'
-      | Array<'email' | 'phone' | 'creditcard' | 'ssn' | 'iin' | 'ip'>;
+      | Array<
+          'email' | 'phone' | 'creditcard' | 'ssn' | 'iin' | 'ip' | 'custom'
+        >;
     customPatterns?: Array<{
-      name: string; // Pattern name for [REDACTED-NAME]
+      name: string; // Pattern name → [REDACTED-NAME]
       regex: RegExp; // Detection regex
       description?: string; // Human-readable description
+      examples?: string[]; // Example values for testing
       priority?: number; // Higher = checked first
     }>;
     excludeSelectors?: string[]; // CSS selectors to exclude from sanitization
@@ -737,7 +743,7 @@ Output: `dist/bugspotter.min.js` (~99 KB)
 - **Load**: < 100ms
 - **Memory**: < 15 MB (30s replay buffer)
 - **Screenshot**: ~500ms
-- **PII sanitization**: <10ms
+- **PII sanitization**: <50ms
 
 ## 🔒 Security
 

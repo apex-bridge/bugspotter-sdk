@@ -246,6 +246,8 @@ Automatic detection and masking of sensitive data **in the browser before upload
 | `token`      | Bearer, JWT, OAuth tokens | `eyJhbG...` → `[REDACTED-TOKEN]`                |
 | `password`   | Password field values     | `••••••••` → `[REDACTED-PASSWORD]`              |
 
+> **Note:** `apikey`, `token`, and `password` are available via presets (`'all'`, `'credentials'`) but not as individual array values in the `patterns` option. Use `patterns: 'all'` or `patterns: 'credentials'` to enable them.
+
 ### Presets
 
 Use a preset name instead of listing patterns individually:
@@ -362,9 +364,9 @@ interface BugSpotterConfig {
       regex: RegExp; // Detection regex
       description?: string; // Human-readable description
       examples?: string[]; // Example values for testing
-      priority?: number; // Higher = checked first
+      priority?: number; // Pattern ordering hint (optional)
     }>;
-    excludeSelectors?: string[]; // CSS selectors to exclude from sanitization
+    excludeSelectors?: string[]; // CSS selectors to exclude from DOM text sanitization (replay)
   };
 }
 ```

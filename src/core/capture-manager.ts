@@ -31,6 +31,8 @@ export interface CaptureManagerConfig {
     collectFonts?: boolean;
     recordCanvas?: boolean;
     recordCrossOriginIframes?: boolean;
+    blockSelectors?: string[];
+    blockClass?: string;
   };
 }
 
@@ -76,6 +78,8 @@ export class CaptureManager {
         collectFonts: config.replay?.collectFonts,
         recordCanvas: config.replay?.recordCanvas,
         recordCrossOriginIframes: config.replay?.recordCrossOriginIframes,
+        blockSelectors: config.replay?.blockSelectors,
+        blockClass: config.replay?.blockClass,
         sanitizer: config.sanitizer,
       });
       this.domCollector.startRecording();

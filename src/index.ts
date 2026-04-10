@@ -171,16 +171,25 @@ export class BugSpotter {
   private config: Readonly<BugSpotterConfig>;
   private widget?: FloatingButton;
   private sanitizer?: Sanitizer;
-  private captureManager: CaptureManager;
+  private captureManager?: CaptureManager;
   private bugReporter: BugReporter;
+  private _sampled: boolean;
 
-  constructor(config: BugSpotterConfig) {
+  constructor(config: BugSpotterConfig, sampled = true) {
     // Validate deduplication configuration if provided
     if (config.deduplication) {
       validateDeduplicationConfig(config.deduplication);
     }
 
     this.config = config;
+    this._sampled = sampled;
+    this.bugReporter = new BugReporter(config);
+
+    // If not sampled, skip all capture initialization — true zero overhead
+    // No console/network interception, no DOM recording, no widget
+    if (!sampled) {
+      return;
+    }
 
     // Initialize sanitizer (enabled by default)
     const sanitizeEnabled = config.sanitize?.enabled ?? true;
@@ -199,9 +208,6 @@ export class BugSpotter {
       ...(config.endpoint && { apiEndpoint: getApiBaseUrl(config.endpoint) }),
       replay: config.replay,
     });
-
-    // Initialize bug reporter
-    this.bugReporter = new BugReporter(config);
 
     // Initialize widget (enabled by default)
     const widgetEnabled = config.showWidget ?? true;
@@ -250,6 +256,22 @@ export class BugSpotter {
   private static async createInstance(
     config: BugSpotterConfig
   ): Promise<BugSpotter> {
+    // Check sampling rate — if this session is not sampled, disable all capture
+    if (config.sampleRate !== undefined) {
+      if (
+        typeof config.sampleRate !== 'number' ||
+        !Number.isFinite(config.sampleRate) ||
+        config.sampleRate < 0 ||
+        config.sampleRate > 1
+      ) {
+        throw new Error('sampleRate must be a finite number between 0 and 1');
+      }
+      if (Math.random() >= config.sampleRate) {
+        // Create a lightweight no-op instance — zero overhead (no console/network interception)
+        return new BugSpotter(config, /* sampled */ false);
+      }
+    }
+
     // Fetch replay quality settings from backend if replay is enabled
     let backendSettings: ReplayQualitySettings | null = null;
     const replayEnabled = config.replay?.enabled ?? true;
@@ -289,7 +311,31 @@ export class BugSpotter {
    * Note: Screenshot is captured for modal preview only (_screenshotPreview)
    * File uploads use presigned URLs returned from the backend
    */
+  /** Whether this session was sampled for capture */
+  get isSampled(): boolean {
+    return this._sampled;
+  }
+
   async capture(): Promise<BugReport> {
+    if (!this.captureManager) {
+      // Unsampled session — return minimal valid report
+      return {
+        console: [],
+        network: [],
+        metadata: {
+          userAgent:
+            typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          url: typeof window !== 'undefined' ? window.location.href : '',
+          timestamp: Date.now(),
+          viewport:
+            typeof window !== 'undefined'
+              ? { width: window.innerWidth, height: window.innerHeight }
+              : { width: 0, height: 0 },
+          browser: 'unknown',
+          os: 'unknown',
+        },
+      };
+    }
     return await this.captureManager.captureAll();
   }
 
@@ -334,7 +380,7 @@ export class BugSpotter {
   }
 
   destroy(): void {
-    this.captureManager.destroy();
+    this.captureManager?.destroy();
     this.widget?.destroy();
     this.bugReporter.destroy();
     BugSpotter.instance = undefined;
@@ -348,6 +394,14 @@ export interface BugSpotterConfig {
 
   /** API key for authentication (starts with 'bgs_'). Required. */
   apiKey: string;
+
+  /**
+   * Session sampling rate (0 to 1). Controls what fraction of sessions activate capture.
+   * - 1 = capture all sessions (default)
+   * - 0.1 = capture 10% of sessions
+   * - 0 = capture nothing (SDK initializes but is inactive)
+   */
+  sampleRate?: number;
 
   showWidget?: boolean;
   widgetOptions?: FloatingButtonOptions;
@@ -384,6 +438,19 @@ export interface BugSpotterConfig {
     recordCanvas?: boolean;
     /** Whether to record cross-origin iframes (default: backend controlled) */
     recordCrossOriginIframes?: boolean;
+    /**
+     * CSS selectors for DOM elements to exclude from session replay.
+     * Matched elements are replaced with a placeholder in the recording.
+     * Use for sensitive content that isn't PII (e.g., financial data, portfolios).
+     * Example: ['.portfolio-table', '#balance-widget', '[data-sensitive]']
+     */
+    blockSelectors?: string[];
+    /**
+     * CSS class name to mark elements for blocking. Any element with this class
+     * will be excluded from replay. Alternative to blockSelectors.
+     * Example: 'bugspotter-block'
+     */
+    blockClass?: string;
   };
   sanitize?: {
     /** Enable PII sanitization (default: true) */

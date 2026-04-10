@@ -28,6 +28,12 @@ describe('BugSpotter', () => {
     if (instance) {
       instance.destroy();
     }
+    // Clean up any leftover modal/widget DOM elements from previous tests
+    document.body.querySelectorAll('*').forEach((el) => {
+      if (el.shadowRoot) {
+        el.remove();
+      }
+    });
   });
 
   describe('Singleton Pattern', () => {
@@ -802,6 +808,192 @@ describe('BugSpotter', () => {
       ).length;
       expect(finalModalCount).toBe(initialModalCount);
 
+      bugspotter.destroy();
+    });
+  });
+
+  describe('Sample Rate', () => {
+    it('should initialize normally when sampleRate is 1', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        sampleRate: 1,
+      });
+      expect(bugspotter).toBeDefined();
+      // Replay should be enabled (default)
+      expect(bugspotter.getConfig().replay?.enabled).not.toBe(false);
+      bugspotter.destroy();
+    });
+
+    it('should initialize in inactive mode when sampleRate is 0', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        sampleRate: 0,
+      });
+      expect(bugspotter).toBeDefined();
+      expect(bugspotter.isSampled).toBe(false);
+      bugspotter.destroy();
+    });
+
+    it('should not intercept console or fetch when not sampled', async () => {
+      // Save original references
+      const originalConsoleLog = console.log;
+      const originalFetch = globalThis.fetch;
+
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        sampleRate: 0,
+      });
+
+      // Console and fetch should NOT be monkey-patched
+      expect(console.log).toBe(originalConsoleLog);
+      expect(globalThis.fetch).toBe(originalFetch);
+
+      // Capture should return empty report
+      const report = await bugspotter.capture();
+      expect(report.console).toEqual([]);
+      expect(report.network).toEqual([]);
+
+      bugspotter.destroy();
+    });
+
+    it('should not create widget when not sampled', async () => {
+      const initialWidgetCount = document.querySelectorAll(
+        'button[style*="position: fixed"]'
+      ).length;
+
+      await BugSpotter.init({
+        apiKey: '',
+        sampleRate: 0,
+        showWidget: true, // Explicitly enabled — but should be ignored when not sampled
+      });
+
+      const finalWidgetCount = document.querySelectorAll(
+        'button[style*="position: fixed"]'
+      ).length;
+      expect(finalWidgetCount).toBe(initialWidgetCount);
+
+      BugSpotter.getInstance()?.destroy();
+    });
+
+    it('should throw when sampleRate is negative', async () => {
+      await expect(
+        BugSpotter.init({ apiKey: '', sampleRate: -0.1 })
+      ).rejects.toThrow('sampleRate must be a finite number between 0 and 1');
+    });
+
+    it('should throw when sampleRate is greater than 1', async () => {
+      await expect(
+        BugSpotter.init({ apiKey: '', sampleRate: 1.5 })
+      ).rejects.toThrow('sampleRate must be a finite number between 0 and 1');
+    });
+
+    it('should throw when sampleRate is NaN', async () => {
+      await expect(
+        BugSpotter.init({ apiKey: '', sampleRate: NaN })
+      ).rejects.toThrow('sampleRate must be a finite number between 0 and 1');
+    });
+
+    it('should throw when sampleRate is Infinity', async () => {
+      await expect(
+        BugSpotter.init({ apiKey: '', sampleRate: Infinity })
+      ).rejects.toThrow('sampleRate must be a finite number between 0 and 1');
+    });
+
+    it('should respect sampleRate probability', async () => {
+      // Mock Math.random to control sampling
+      const mockRandom = vi.spyOn(Math, 'random');
+
+      // Session sampled in (random < sampleRate)
+      mockRandom.mockReturnValueOnce(0.05);
+      const sampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
+      expect(sampled.isSampled).toBe(true);
+      sampled.destroy();
+
+      // Session sampled out (random >= sampleRate)
+      mockRandom.mockReturnValueOnce(0.15);
+      const notSampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
+      expect(notSampled.isSampled).toBe(false);
+      notSampled.destroy();
+
+      mockRandom.mockRestore();
+    });
+
+    it('should not have sampleRate affect init when not set', async () => {
+      const bugspotter = await BugSpotter.init({ apiKey: '' });
+      expect(bugspotter).toBeDefined();
+      expect(bugspotter.getConfig().replay?.enabled).not.toBe(false);
+      expect(bugspotter.isSampled).toBe(true);
+      bugspotter.destroy();
+    });
+
+    it('should expose isSampled getter', async () => {
+      const mockRandom = vi.spyOn(Math, 'random');
+
+      mockRandom.mockReturnValueOnce(0.05);
+      const sampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
+      expect(sampled.isSampled).toBe(true);
+      sampled.destroy();
+
+      mockRandom.mockReturnValueOnce(0.5);
+      const notSampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
+      expect(notSampled.isSampled).toBe(false);
+      notSampled.destroy();
+
+      mockRandom.mockRestore();
+    });
+  });
+
+  describe('Block Selectors', () => {
+    it('should accept blockSelectors in replay config', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        replay: {
+          enabled: false, // Disable replay to avoid rrweb/jsdom incompatibility
+          blockSelectors: ['.portfolio-table', '#balance-widget'],
+        },
+      });
+      expect(bugspotter.getConfig().replay?.blockSelectors).toEqual([
+        '.portfolio-table',
+        '#balance-widget',
+      ]);
+      bugspotter.destroy();
+    });
+
+    it('should accept blockClass in replay config', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        replay: {
+          enabled: false,
+          blockClass: 'bugspotter-block',
+        },
+      });
+      expect(bugspotter.getConfig().replay?.blockClass).toBe(
+        'bugspotter-block'
+      );
+      bugspotter.destroy();
+    });
+
+    it('should accept both blockSelectors and blockClass', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        replay: {
+          enabled: false,
+          blockSelectors: ['.secret'],
+          blockClass: 'no-record',
+        },
+      });
+      const config = bugspotter.getConfig();
+      expect(config.replay?.blockSelectors).toEqual(['.secret']);
+      expect(config.replay?.blockClass).toBe('no-record');
+      bugspotter.destroy();
+    });
+
+    it('should work without blockSelectors (undefined)', async () => {
+      const bugspotter = await BugSpotter.init({
+        apiKey: '',
+        replay: { enabled: true },
+      });
+      expect(bugspotter.getConfig().replay?.blockSelectors).toBeUndefined();
       bugspotter.destroy();
     });
   });

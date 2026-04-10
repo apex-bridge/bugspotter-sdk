@@ -250,6 +250,24 @@ export class BugSpotter {
   private static async createInstance(
     config: BugSpotterConfig
   ): Promise<BugSpotter> {
+    // Check sampling rate — if this session is not sampled, disable all capture
+    if (typeof config.sampleRate === 'number') {
+      if (config.sampleRate < 0 || config.sampleRate > 1) {
+        throw new Error('sampleRate must be between 0 and 1');
+      }
+      if (Math.random() >= config.sampleRate) {
+        logger.warn(
+          `Session not sampled (sampleRate: ${config.sampleRate}). SDK initialized in inactive mode.`
+        );
+        // Create a lightweight instance with everything disabled
+        return new BugSpotter({
+          ...config,
+          replay: { ...config.replay, enabled: false },
+          showWidget: false,
+        });
+      }
+    }
+
     // Fetch replay quality settings from backend if replay is enabled
     let backendSettings: ReplayQualitySettings | null = null;
     const replayEnabled = config.replay?.enabled ?? true;
@@ -349,6 +367,14 @@ export interface BugSpotterConfig {
   /** API key for authentication (starts with 'bgs_'). Required. */
   apiKey: string;
 
+  /**
+   * Session sampling rate (0 to 1). Controls what fraction of sessions activate capture.
+   * - 1 = capture all sessions (default)
+   * - 0.1 = capture 10% of sessions
+   * - 0 = capture nothing (SDK initializes but is inactive)
+   */
+  sampleRate?: number;
+
   showWidget?: boolean;
   widgetOptions?: FloatingButtonOptions;
 
@@ -384,6 +410,19 @@ export interface BugSpotterConfig {
     recordCanvas?: boolean;
     /** Whether to record cross-origin iframes (default: backend controlled) */
     recordCrossOriginIframes?: boolean;
+    /**
+     * CSS selectors for DOM elements to exclude from session replay.
+     * Matched elements are replaced with a placeholder in the recording.
+     * Use for sensitive content that isn't PII (e.g., financial data, portfolios).
+     * Example: ['.portfolio-table', '#balance-widget', '[data-sensitive]']
+     */
+    blockSelectors?: string[];
+    /**
+     * CSS class name to mark elements for blocking. Any element with this class
+     * will be excluded from replay. Alternative to blockSelectors.
+     * Example: 'bugspotter-block'
+     */
+    blockClass?: string;
   };
   sanitize?: {
     /** Enable PII sanitization (default: true) */

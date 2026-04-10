@@ -24,6 +24,10 @@ export interface DOMCollectorConfig {
   recordCanvas?: boolean;
   /** Whether to record cross-origin iframes (default: false) */
   recordCrossOriginIframes?: boolean;
+  /** CSS selectors for elements to block from recording */
+  blockSelectors?: string[];
+  /** CSS class name to block elements from recording */
+  blockClass?: string;
   /** Sanitizer for PII protection */
   sanitizer?: Sanitizer;
 }
@@ -116,6 +120,13 @@ export class DOMCollector {
         inlineStylesheet: this.config.inlineStylesheet,
         inlineImages: this.config.inlineImages,
         collectFonts: this.config.collectFonts,
+        // Block sensitive elements from recording
+        ...(this.config.blockSelectors?.length && {
+          blockSelector: this.config.blockSelectors.join(','),
+        }),
+        ...(this.config.blockClass && {
+          blockClass: this.config.blockClass,
+        }),
       };
 
       this.stopRecordingFn = record(recordConfig);

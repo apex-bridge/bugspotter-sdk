@@ -28,6 +28,12 @@ describe('BugSpotter', () => {
     if (instance) {
       instance.destroy();
     }
+    // Clean up any leftover modal/widget DOM elements from previous tests
+    document.body.querySelectorAll('*').forEach((el) => {
+      if (el.shadowRoot) {
+        el.remove();
+      }
+    });
   });
 
   describe('Singleton Pattern', () => {

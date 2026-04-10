@@ -8,6 +8,17 @@ import { beforeAll } from 'vitest';
 // Suppress JSDOM "Not implemented" warnings for getComputedStyle
 // These are expected when using html-to-image in JSDOM environment
 beforeAll(() => {
+  // Mock HTMLImageElement.decode — not implemented in jsdom
+  // html-to-image calls img.decode() which throws "img.decode is not a function"
+  if (
+    typeof HTMLImageElement !== 'undefined' &&
+    !HTMLImageElement.prototype.decode
+  ) {
+    HTMLImageElement.prototype.decode = function () {
+      return Promise.resolve();
+    };
+  }
+
   // Suppress console.log, console.info, and console.debug during tests
   const originalError = console.error;
 
@@ -27,6 +38,8 @@ beforeAll(() => {
       '[BugSpotter] ScreenshotCapture capturing screenshot',
       '[BugSpotter] Canvas redaction not available',
       '[BugSpotter] Image compression failed',
+      'Error: Could not load img',
+      'Error: Resource was not loaded',
     ];
     if (suppressedMessages.some((suppressed) => message.includes(suppressed))) {
       return; // Suppress this warning

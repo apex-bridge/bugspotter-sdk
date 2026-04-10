@@ -355,7 +355,16 @@ interface BugSpotterConfig {
       | 'gdpr'
       | 'pci'
       | Array<
-          'email' | 'phone' | 'creditcard' | 'ssn' | 'iin' | 'ip' | 'custom'
+          | 'email'
+          | 'phone'
+          | 'creditcard'
+          | 'ssn'
+          | 'iin'
+          | 'ip'
+          | 'apikey'
+          | 'token'
+          | 'password'
+          | 'custom'
         >;
     customPatterns?: Array<{
       name: string; // Pattern name → [REDACTED-NAME]

@@ -133,18 +133,18 @@ class ValueSanitizer {
       return this.stringSanitizer.sanitize(value);
     }
 
-    // Handle arrays
+    // Handle arrays (with circular reference protection)
     if (Array.isArray(value)) {
       if (this.seen.has(value)) return '[Circular]';
       this.seen.add(value);
-      const result = value.map((item) => {
-        return this.sanitize(item);
-      });
-      this.seen.delete(value);
-      return result;
+      try {
+        return value.map((item) => this.sanitize(item));
+      } finally {
+        this.seen.delete(value);
+      }
     }
 
-    // Handle objects
+    // Handle objects (with circular reference protection)
     if (typeof value === 'object') {
       if (this.seen.has(value as object)) return '[Circular]';
       return this.sanitizeObject(value);
@@ -156,15 +156,16 @@ class ValueSanitizer {
 
   private sanitizeObject(obj: object): Record<string, unknown> {
     this.seen.add(obj);
-    const sanitized: Record<string, unknown> = {};
-
-    for (const [key, val] of Object.entries(obj)) {
-      const sanitizedKey = this.stringSanitizer.sanitize(key);
-      sanitized[sanitizedKey] = this.sanitize(val);
+    try {
+      const sanitized: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(obj)) {
+        const sanitizedKey = this.stringSanitizer.sanitize(key);
+        sanitized[sanitizedKey] = this.sanitize(val);
+      }
+      return sanitized;
+    } finally {
+      this.seen.delete(obj);
     }
-
-    this.seen.delete(obj);
-    return sanitized;
   }
 }
 

@@ -145,7 +145,9 @@ describe('Sanitizer', () => {
       const customSanitizer = createSanitizer({
         enabled: true,
         patterns: ['custom'],
-        customPatterns: [{ name: 'api-key', regex: /(?:API[-_]?KEY[-_:]?\s*[\w-]{20,})/gi }],
+        customPatterns: [
+          { name: 'api-key', regex: /(?:API[-_]?KEY[-_:]?\s*[\w-]{20,})/gi },
+        ],
       });
 
       const input = 'API_KEY: abcd1234efgh5678ijkl';
@@ -245,7 +247,9 @@ describe('Sanitizer', () => {
 
       expect(output[0]).toBe('User email:');
       expect(output[1]).toBe('[REDACTED-EMAIL]');
-      expect((output[2] as { phone: string }).phone).toContain('[REDACTED-PHONE]');
+      expect((output[2] as { phone: string }).phone).toContain(
+        '[REDACTED-PHONE]'
+      );
     });
 
     it('should handle mixed argument types', () => {
@@ -272,7 +276,9 @@ describe('Sanitizer', () => {
       const output = sanitizer.sanitizeNetworkData(data);
       expect(output.url).toContain('[REDACTED-EMAIL]');
       expect((output.body as typeof data.body).email).toBe('[REDACTED-EMAIL]');
-      expect((output.body as typeof data.body).phone).toContain('[REDACTED-PHONE]');
+      expect((output.body as typeof data.body).phone).toContain(
+        '[REDACTED-PHONE]'
+      );
     });
 
     it('should sanitize headers with sensitive data', () => {
@@ -319,8 +325,12 @@ describe('Sanitizer', () => {
       };
 
       const output = sanitizer.sanitizeError(error);
-      expect((output.details as typeof error.details).user.email).toBe('[REDACTED-EMAIL]');
-      expect((output.details as typeof error.details).user.ssn).toBe('[REDACTED-SSN]');
+      expect((output.details as typeof error.details).user.email).toBe(
+        '[REDACTED-EMAIL]'
+      );
+      expect((output.details as typeof error.details).user.ssn).toBe(
+        '[REDACTED-SSN]'
+      );
     });
   });
 
@@ -497,6 +507,38 @@ describe('Sanitizer', () => {
       const output = sanitizer.sanitize(input);
 
       expect(output).toBe('Please contact [REDACTED-EMAIL] for access');
+    });
+  });
+
+  describe('Circular Reference Protection', () => {
+    it('should handle circular object references without throwing', () => {
+      const obj: Record<string, unknown> = { name: 'test@example.com' };
+      obj.self = obj;
+
+      const result = sanitizer.sanitize(obj) as Record<string, unknown>;
+      expect(result.name).toBe('[REDACTED-EMAIL]');
+      expect(result.self).toBe('[Circular]');
+    });
+
+    it('should handle circular array references without throwing', () => {
+      const arr: unknown[] = ['test@example.com'];
+      arr.push(arr);
+
+      const result = sanitizer.sanitize(arr) as unknown[];
+      expect(result[0]).toBe('[REDACTED-EMAIL]');
+      expect(result[1]).toBe('[Circular]');
+    });
+
+    it('should sanitize correctly after encountering circular reference', () => {
+      // First call with circular ref
+      const circular: Record<string, unknown> = { email: 'a@b.com' };
+      circular.self = circular;
+      sanitizer.sanitize(circular);
+
+      // Second call should still work (seen set cleaned up)
+      const normal = { email: 'c@d.com' };
+      const result = sanitizer.sanitize(normal) as Record<string, unknown>;
+      expect(result.email).toBe('[REDACTED-EMAIL]');
     });
   });
 });

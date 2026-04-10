@@ -118,6 +118,8 @@ class StringSanitizer {
  * Value Sanitizer - SRP: Handles recursive object/array traversal
  */
 class ValueSanitizer {
+  private readonly seen = new WeakSet<object>();
+
   constructor(private stringSanitizer: StringSanitizer) {}
 
   sanitize(value: unknown): unknown {
@@ -131,15 +133,20 @@ class ValueSanitizer {
       return this.stringSanitizer.sanitize(value);
     }
 
-    // Handle arrays
+    // Handle arrays (with circular reference protection)
     if (Array.isArray(value)) {
-      return value.map((item) => {
-        return this.sanitize(item);
-      });
+      if (this.seen.has(value)) return '[Circular]';
+      this.seen.add(value);
+      try {
+        return value.map((item) => this.sanitize(item));
+      } finally {
+        this.seen.delete(value);
+      }
     }
 
-    // Handle objects
+    // Handle objects (with circular reference protection)
     if (typeof value === 'object') {
+      if (this.seen.has(value as object)) return '[Circular]';
       return this.sanitizeObject(value);
     }
 
@@ -148,14 +155,17 @@ class ValueSanitizer {
   }
 
   private sanitizeObject(obj: object): Record<string, unknown> {
-    const sanitized: Record<string, unknown> = {};
-
-    for (const [key, val] of Object.entries(obj)) {
-      const sanitizedKey = this.stringSanitizer.sanitize(key);
-      sanitized[sanitizedKey] = this.sanitize(val);
+    this.seen.add(obj);
+    try {
+      const sanitized: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(obj)) {
+        const sanitizedKey = this.stringSanitizer.sanitize(key);
+        sanitized[sanitizedKey] = this.sanitize(val);
+      }
+      return sanitized;
+    } finally {
+      this.seen.delete(obj);
     }
-
-    return sanitized;
   }
 }
 

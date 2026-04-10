@@ -466,11 +466,21 @@ export interface BugSpotterConfig {
       | 'financial'
       | 'contact'
       | 'identification'
+      | 'credentials'
       | 'kazakhstan'
       | 'gdpr'
       | 'pci'
       | Array<
-          'email' | 'phone' | 'creditcard' | 'ssn' | 'iin' | 'ip' | 'custom'
+          | 'email'
+          | 'phone'
+          | 'creditcard'
+          | 'ssn'
+          | 'iin'
+          | 'ip'
+          | 'apikey'
+          | 'token'
+          | 'password'
+          | 'custom'
         >;
     /** Custom regex patterns for PII detection */
     customPatterns?: Array<{

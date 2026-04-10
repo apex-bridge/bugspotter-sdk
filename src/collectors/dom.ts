@@ -68,6 +68,8 @@ export class DOMCollector {
       collectFonts: config.collectFonts ?? false,
       recordCanvas: config.recordCanvas ?? false,
       recordCrossOriginIframes: config.recordCrossOriginIframes ?? false,
+      blockSelectors: config.blockSelectors,
+      blockClass: config.blockClass,
       sanitizer: config.sanitizer,
     };
 

@@ -173,14 +173,23 @@ export class BugSpotter {
   private sanitizer?: Sanitizer;
   private captureManager: CaptureManager;
   private bugReporter: BugReporter;
+  private _sampled: boolean;
 
-  constructor(config: BugSpotterConfig) {
+  constructor(config: BugSpotterConfig, sampled = true) {
     // Validate deduplication configuration if provided
     if (config.deduplication) {
       validateDeduplicationConfig(config.deduplication);
     }
 
     this.config = config;
+    this._sampled = sampled;
+
+    // If not sampled, create minimal no-op instance — zero overhead
+    if (!sampled) {
+      this.captureManager = new CaptureManager({ replay: { enabled: false } });
+      this.bugReporter = new BugReporter(config);
+      return;
+    }
 
     // Initialize sanitizer (enabled by default)
     const sanitizeEnabled = config.sanitize?.enabled ?? true;
@@ -252,19 +261,16 @@ export class BugSpotter {
   ): Promise<BugSpotter> {
     // Check sampling rate — if this session is not sampled, disable all capture
     if (typeof config.sampleRate === 'number') {
-      if (config.sampleRate < 0 || config.sampleRate > 1) {
-        throw new Error('sampleRate must be between 0 and 1');
+      if (
+        !Number.isFinite(config.sampleRate) ||
+        config.sampleRate < 0 ||
+        config.sampleRate > 1
+      ) {
+        throw new Error('sampleRate must be a finite number between 0 and 1');
       }
       if (Math.random() >= config.sampleRate) {
-        logger.warn(
-          `Session not sampled (sampleRate: ${config.sampleRate}). SDK initialized in inactive mode.`
-        );
-        // Create a lightweight instance with everything disabled
-        return new BugSpotter({
-          ...config,
-          replay: { ...config.replay, enabled: false },
-          showWidget: false,
-        });
+        // Create a lightweight no-op instance — zero overhead (no console/network interception)
+        return new BugSpotter(config, /* sampled */ false);
       }
     }
 
@@ -307,6 +313,11 @@ export class BugSpotter {
    * Note: Screenshot is captured for modal preview only (_screenshotPreview)
    * File uploads use presigned URLs returned from the backend
    */
+  /** Whether this session was sampled for capture */
+  get isSampled(): boolean {
+    return this._sampled;
+  }
+
   async capture(): Promise<BugReport> {
     return await this.captureManager.captureAll();
   }

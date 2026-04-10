@@ -830,23 +830,32 @@ describe('BugSpotter', () => {
         sampleRate: 0,
       });
       expect(bugspotter).toBeDefined();
-      // Replay should be disabled (sampled out)
-      expect(bugspotter.getConfig().replay?.enabled).toBe(false);
-      // Widget should be disabled
-      expect(bugspotter.getConfig().showWidget).toBe(false);
+      expect(bugspotter.isSampled).toBe(false);
       bugspotter.destroy();
     });
 
     it('should throw when sampleRate is negative', async () => {
       await expect(
         BugSpotter.init({ apiKey: '', sampleRate: -0.1 })
-      ).rejects.toThrow('sampleRate must be between 0 and 1');
+      ).rejects.toThrow('sampleRate must be a finite number between 0 and 1');
     });
 
     it('should throw when sampleRate is greater than 1', async () => {
       await expect(
         BugSpotter.init({ apiKey: '', sampleRate: 1.5 })
-      ).rejects.toThrow('sampleRate must be between 0 and 1');
+      ).rejects.toThrow('sampleRate must be a finite number between 0 and 1');
+    });
+
+    it('should throw when sampleRate is NaN', async () => {
+      await expect(
+        BugSpotter.init({ apiKey: '', sampleRate: NaN })
+      ).rejects.toThrow('sampleRate must be a finite number between 0 and 1');
+    });
+
+    it('should throw when sampleRate is Infinity', async () => {
+      await expect(
+        BugSpotter.init({ apiKey: '', sampleRate: Infinity })
+      ).rejects.toThrow('sampleRate must be a finite number between 0 and 1');
     });
 
     it('should respect sampleRate probability', async () => {
@@ -856,13 +865,13 @@ describe('BugSpotter', () => {
       // Session sampled in (random < sampleRate)
       mockRandom.mockReturnValueOnce(0.05);
       const sampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
-      expect(sampled.getConfig().replay?.enabled).not.toBe(false);
+      expect(sampled.isSampled).toBe(true);
       sampled.destroy();
 
       // Session sampled out (random >= sampleRate)
       mockRandom.mockReturnValueOnce(0.15);
       const notSampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
-      expect(notSampled.getConfig().replay?.enabled).toBe(false);
+      expect(notSampled.isSampled).toBe(false);
       notSampled.destroy();
 
       mockRandom.mockRestore();
@@ -872,7 +881,24 @@ describe('BugSpotter', () => {
       const bugspotter = await BugSpotter.init({ apiKey: '' });
       expect(bugspotter).toBeDefined();
       expect(bugspotter.getConfig().replay?.enabled).not.toBe(false);
+      expect(bugspotter.isSampled).toBe(true);
       bugspotter.destroy();
+    });
+
+    it('should expose isSampled getter', async () => {
+      const mockRandom = vi.spyOn(Math, 'random');
+
+      mockRandom.mockReturnValueOnce(0.05);
+      const sampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
+      expect(sampled.isSampled).toBe(true);
+      sampled.destroy();
+
+      mockRandom.mockReturnValueOnce(0.5);
+      const notSampled = await BugSpotter.init({ apiKey: '', sampleRate: 0.1 });
+      expect(notSampled.isSampled).toBe(false);
+      notSampled.destroy();
+
+      mockRandom.mockRestore();
     });
   });
 
@@ -881,6 +907,7 @@ describe('BugSpotter', () => {
       const bugspotter = await BugSpotter.init({
         apiKey: '',
         replay: {
+          enabled: false, // Disable replay to avoid rrweb/jsdom incompatibility
           blockSelectors: ['.portfolio-table', '#balance-widget'],
         },
       });
@@ -895,6 +922,7 @@ describe('BugSpotter', () => {
       const bugspotter = await BugSpotter.init({
         apiKey: '',
         replay: {
+          enabled: false,
           blockClass: 'bugspotter-block',
         },
       });
@@ -908,6 +936,7 @@ describe('BugSpotter', () => {
       const bugspotter = await BugSpotter.init({
         apiKey: '',
         replay: {
+          enabled: false,
           blockSelectors: ['.secret'],
           blockClass: 'no-record',
         },

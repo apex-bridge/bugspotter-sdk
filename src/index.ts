@@ -323,10 +323,14 @@ export class BugSpotter {
         console: [],
         network: [],
         metadata: {
-          userAgent: navigator.userAgent,
-          url: window.location.href,
+          userAgent:
+            typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          url: typeof window !== 'undefined' ? window.location.href : '',
           timestamp: Date.now(),
-          viewport: { width: window.innerWidth, height: window.innerHeight },
+          viewport:
+            typeof window !== 'undefined'
+              ? { width: window.innerWidth, height: window.innerHeight }
+              : { width: 0, height: 0 },
           browser: 'unknown',
           os: 'unknown',
         },

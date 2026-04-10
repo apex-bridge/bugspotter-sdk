@@ -118,6 +118,8 @@ class StringSanitizer {
  * Value Sanitizer - SRP: Handles recursive object/array traversal
  */
 class ValueSanitizer {
+  private seen = new WeakSet();
+
   constructor(private stringSanitizer: StringSanitizer) {}
 
   sanitize(value: unknown): unknown {
@@ -133,13 +135,18 @@ class ValueSanitizer {
 
     // Handle arrays
     if (Array.isArray(value)) {
-      return value.map((item) => {
+      if (this.seen.has(value)) return '[Circular]';
+      this.seen.add(value);
+      const result = value.map((item) => {
         return this.sanitize(item);
       });
+      this.seen.delete(value);
+      return result;
     }
 
     // Handle objects
     if (typeof value === 'object') {
+      if (this.seen.has(value as object)) return '[Circular]';
       return this.sanitizeObject(value);
     }
 
@@ -148,6 +155,7 @@ class ValueSanitizer {
   }
 
   private sanitizeObject(obj: object): Record<string, unknown> {
+    this.seen.add(obj);
     const sanitized: Record<string, unknown> = {};
 
     for (const [key, val] of Object.entries(obj)) {
@@ -155,6 +163,7 @@ class ValueSanitizer {
       sanitized[sanitizedKey] = this.sanitize(val);
     }
 
+    this.seen.delete(obj);
     return sanitized;
   }
 }

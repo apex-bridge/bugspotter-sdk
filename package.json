@@ -80,7 +80,7 @@
   },
   "dependencies": {
     "@bugspotter/common": "^1.0.1",
-    "@rrweb/types": "2.0.0-alpha.18",
+    "@rrweb/types": "2.0.0-alpha.20",
     "html-to-image": "^1.11.13",
     "pako": "^2.1.0",
     "rrweb": "2.0.0-alpha.4",

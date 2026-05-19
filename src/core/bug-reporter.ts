@@ -355,7 +355,8 @@ export class BugReporter {
         formatSubmissionError(
           `Bug report created (ID: ${bugId}) but file upload failed`,
           error
-        )
+        ),
+        { cause: error }
       );
     }
   }

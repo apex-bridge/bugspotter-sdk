@@ -119,7 +119,8 @@ export function decompressData(
       getLogger().error('Decompression failed:', error);
     }
     throw new Error(
-      `Failed to decompress data: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to decompress data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error }
     );
   }
 }

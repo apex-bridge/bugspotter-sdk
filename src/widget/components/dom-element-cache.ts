@@ -26,6 +26,12 @@ export interface ModalElements {
   cancelButton: HTMLButtonElement;
   submitButton: HTMLButtonElement;
   progressStatus: HTMLElement;
+  /**
+   * Deflection panel container — always in the DOM (the template
+   * emits an empty hidden div), populated only when deflection is
+   * enabled and the similarity probe returns matches.
+   */
+  deflectionSection: HTMLElement;
 }
 
 export class DOMElementCache {
@@ -82,6 +88,7 @@ export class DOMElementCache {
         modal
       ) as HTMLButtonElement,
       progressStatus: this.getRequiredElement('#progress-status', modal),
+      deflectionSection: this.getRequiredElement('#deflection-section', modal),
     };
 
     return this.elements;

@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DeflectionDisplay } from '../../src/widget/components/deflection-display';
-import type { DeflectionMatch } from '../../src/core/deflection-api';
+import type { DeflectionMatch } from '@bugspotter/common';
 
 const MATCHES: DeflectionMatch[] = [
   {

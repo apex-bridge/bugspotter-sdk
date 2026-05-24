@@ -13,7 +13,11 @@
  *     the network.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DeflectionApi } from '../../src/core/deflection-api';
+// Tests exercise common's DeflectionApi end-to-end (the SDK no longer
+// has its own copy — it imports from @bugspotter/common). Keeping the
+// tests here means a regression in common surfaces in the SDK suite,
+// which is wired into CI; common's repo doesn't have a vitest setup.
+import { DeflectionApi } from '@bugspotter/common';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -32,7 +36,10 @@ describe('DeflectionApi', () => {
     global.fetch = fetchSpy as unknown as typeof fetch;
     api = new DeflectionApi({
       endpoint: 'https://api.example.com',
-      apiKey: 'bgs_test',
+      // Common's API takes a getAuthHeaders callback (the extension
+      // reads chrome.storage; the SDK closes over a static key).
+      // Tests pass a static map directly.
+      getAuthHeaders: () => ({ 'X-API-Key': 'bgs_test' }),
       debounceMs: 100,
       maxMatches: 3,
     });
@@ -159,6 +166,33 @@ describe('DeflectionApi', () => {
     api.cancel();
     await vi.advanceTimersByTimeAsync(500);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // Regression guard for the promise-leak Gemini flagged on
+  // bugspotter-common PR #3. Without the `pendingResolve` tracker,
+  // a superseded query would leave its promise pending forever — in
+  // a typing session that's N-1 leaked closures pinning DOM refs.
+  // The contract: superseded queries resolve to [] so awaits don't
+  // stall AND the closure can GC.
+  it('superseded query() resolves to [] (no leak)', async () => {
+    fetchSpy.mockResolvedValue(
+      jsonResponse({ success: true, data: { matches: [] } })
+    );
+    const firstPromise = api.query('first query text');
+    // Replace before the first one's debounce fires.
+    const secondPromise = api.query('second query text');
+    await vi.advanceTimersByTimeAsync(150);
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+    expect(first).toEqual([]); // <-- the contract: superseded got []
+    expect(second).toEqual([]);
+  });
+
+  it('cancel() resolves the pending query to [] (no hung awaits)', async () => {
+    const pending = api.query('about to be cancelled');
+    api.cancel();
+    // Without the cancel-time settlement, this await would hang forever.
+    const result = await pending;
+    expect(result).toEqual([]);
   });
 
   it('clamps result count to maxMatches even if backend over-returns', async () => {

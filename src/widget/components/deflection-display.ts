@@ -10,7 +10,7 @@
  * (the deflection container passed in at construction).
  */
 
-import type { DeflectionMatch } from '../../core/deflection-api';
+import { statusLabel, type DeflectionMatch } from '@bugspotter/common';
 
 export interface DeflectionDisplayCallbacks {
   /**
@@ -20,30 +20,6 @@ export interface DeflectionDisplayCallbacks {
    * to clear a prior confirmation.
    */
   onConfirmedChange: (canonicalId: string | null) => void;
-}
-
-/**
- * Map intelligence status strings to short user-friendly labels.
- * The status field flows straight from the backend; this keeps the
- * label set small and predictable so non-English locales (when we
- * add them) only have to translate a handful of strings.
- */
-function statusLabel(status: string): string {
-  switch (status.toLowerCase()) {
-    case 'open':
-      return 'Open';
-    case 'in_progress':
-    case 'in-progress':
-      return 'In progress';
-    case 'closed':
-    case 'resolved':
-      return 'Fixed';
-    case 'wont_fix':
-    case 'wontfix':
-      return 'Won’t fix';
-    default:
-      return status;
-  }
 }
 
 export class DeflectionDisplay {

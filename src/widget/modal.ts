@@ -6,7 +6,7 @@ import { PIIDetectionDisplay } from './components/pii-detection-display';
 import { RedactionCanvas } from './components/redaction-canvas';
 import { ScreenshotProcessor } from './components/screenshot-processor';
 import { DeflectionDisplay } from './components/deflection-display';
-import { DeflectionApi } from '../core/deflection-api';
+import { DeflectionApi } from '@bugspotter/common';
 import { createSanitizer } from '../utils/sanitize';
 import { getLogger } from '../utils/logger';
 
@@ -220,11 +220,22 @@ export class BugReportModal {
     }
     const elements = this.domCache.get();
     try {
+      // Common's DeflectionApi takes a `getAuthHeaders` callback so
+      // it stays platform-agnostic (the extension reads chrome.storage
+      // at call time). The SDK has a static API key so we just close
+      // over it here. Funnel non-AbortError failures through the
+      // existing logger; AbortErrors are handled inside common.
+      const apiKey = this.options.deflection.apiKey;
       this.deflectionApi = new DeflectionApi({
         endpoint: this.options.deflection.endpoint,
-        apiKey: this.options.deflection.apiKey,
+        getAuthHeaders: () => ({ 'X-API-Key': apiKey }),
         debounceMs: this.options.deflection.debounceMs,
         maxMatches: this.options.deflection.maxMatches,
+        onError: (error) => {
+          logger.debug('Deflection probe failed', {
+            errorType: error instanceof Error ? error.name : 'NonErrorThrown',
+          });
+        },
       });
       this.deflectionDisplay = new DeflectionDisplay(
         elements.deflectionSection,

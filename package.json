@@ -87,6 +87,7 @@
     "rrweb-snapshot": "2.0.0-alpha.4"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
     "@playwright/test": "^1.48.0",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-node-resolve": "^16.0.3",

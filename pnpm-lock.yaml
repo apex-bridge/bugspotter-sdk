@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@bugspotter/common':
         specifier: ^1.0.1
-        version: 1.0.2
+        version: 1.1.1
       '@rrweb/types':
         specifier: 2.0.0-alpha.20
         version: 2.0.0-alpha.20
@@ -140,8 +140,8 @@ packages:
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
 
-  '@bugspotter/common@1.0.2':
-    resolution: {integrity: sha512-wOHkJfgstM0jqdLZpLrH8IF526Q5hCK3nSi09UhHYSRNo/m3iFb6997un/4ERRTLuxNf8zUqcHtUgR62irRV3g==}
+  '@bugspotter/common@1.1.1':
+    resolution: {integrity: sha512-aRQ7gm/k0voHZthPDMzCxkEf4aQbN5kEmoqqdbTcS/sDhWBh+5iEMB7w0yeaPkpm8I3tdXHUTdAAx2jZjqkRzA==}
 
   '@csstools/color-helpers@5.1.0':
     resolution: {integrity: sha512-S11EXWJyy0Mz5SYvRmY8nJYTFFd1LCNV+7cXyAgQtOOuzb4EsgfqDufL+9esx72/eLhsRdGZwaldu/h+E4t4BA==}
@@ -2352,7 +2352,7 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
-  '@bugspotter/common@1.0.2': {}
+  '@bugspotter/common@1.1.1': {}
 
   '@csstools/color-helpers@5.1.0': {}
 

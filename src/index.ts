@@ -342,14 +342,30 @@ export class BugSpotter {
   private async handleBugReport(): Promise<void> {
     const report = await this.capture();
 
+    // Deflection requires both endpoint + apiKey to call the
+    // similarity probe. Opt-in via `config.deflection.enabled`.
+    const deflectionEnabled =
+      this.config.deflection?.enabled === true &&
+      !!this.config.endpoint &&
+      !!this.config.apiKey;
+
     const modal = new BugReportModal({
       onSubmit: async (data) => {
-        logger.log('Submitting bug:', { ...data, report });
+        // Translate widget camelCase → backend snake_case at the
+        // bridge. Keeps the modal API JS-idiomatic without leaking
+        // the backend's field-naming convention into the widget.
+        const { deflectedToCanonicalId, ...rest } = data;
+        const payload: BugReportPayload = {
+          ...rest,
+          report,
+          deflected_to_canonical_id: deflectedToCanonicalId ?? null,
+        };
+        logger.log('Submitting bug:', { ...payload, report });
 
         // Send to endpoint if configured
         if (this.config.endpoint) {
           try {
-            await this.submit({ ...data, report });
+            await this.submit(payload);
             logger.log('Bug report submitted successfully');
           } catch (error) {
             logger.error('Failed to submit bug report:', error);
@@ -361,6 +377,16 @@ export class BugSpotter {
       onProgress: (message) => {
         logger.debug('Upload progress:', message);
       },
+      ...(deflectionEnabled
+        ? {
+            deflection: {
+              endpoint: this.config.endpoint!,
+              apiKey: this.config.apiKey,
+              debounceMs: this.config.deflection?.debounceMs,
+              maxMatches: this.config.deflection?.maxMatches,
+            },
+          }
+        : {}),
     });
 
     modal.show(report._screenshotPreview || '');
@@ -452,6 +478,35 @@ export interface BugSpotterConfig {
      */
     blockClass?: string;
   };
+  /**
+   * In-widget deflection — before the user submits, show similar
+   * existing bugs inline so they can confirm "yes, this is the same
+   * as #44 (Fixed in v2.3)" and skip the duplicate submission. Opt-in;
+   * defaults to disabled to preserve existing widget UX.
+   *
+   * When enabled, the widget calls `/api/v1/sdk/similar` with a
+   * debounced title query and renders the top matches between the
+   * title field and the description field. The form's input values
+   * are never touched by this flow — failures (network, intelligence
+   * disabled, timeout) silently render zero matches and normal
+   * submission continues.
+   */
+  deflection?: {
+    /** Enable in-widget deflection. Default: false. */
+    enabled?: boolean;
+    /**
+     * Debounce delay in ms between title-input keystrokes and the
+     * similarity probe. Default: 400. Lower values feel snappier
+     * but spam the backend on every character; the backend rate-
+     * limits per API key so going below ~200 is asking for 429s.
+     */
+    debounceMs?: number;
+    /**
+     * Max matches the widget will render. Hard-capped at 5 server-
+     * side; this clamps below that ceiling. Default: 3.
+     */
+    maxMatches?: number;
+  };
   sanitize?: {
     /** Enable PII sanitization (default: true) */
     enabled?: boolean;
@@ -499,6 +554,14 @@ export interface BugReportPayload {
   title: string;
   description?: string;
   report: BugReport;
+  /**
+   * Set by the widget when the user confirmed a deflection chip
+   * ("yes, this is the same as #X"). Sent to the backend which
+   * writes it to `bug_reports.duplicate_of` directly — bypasses the
+   * intelligence pipeline's pre-file dedup grace. Backend validates
+   * the canonical belongs to the same project.
+   */
+  deflected_to_canonical_id?: string | null;
 }
 
 export interface BugReport {

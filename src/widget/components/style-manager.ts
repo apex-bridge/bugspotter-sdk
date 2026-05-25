@@ -84,6 +84,7 @@ export class StyleManager {
       ${this.generateFormStyles()}
       ${this.generateButtonStyles()}
       ${this.generatePIIStyles()}
+      ${this.generateDeflectionStyles()}
       ${this.generateLoadingStyles()}
       ${this.generateAccessibilityStyles()}
       ${this.generateTabletResponsiveStyles()}
@@ -336,6 +337,86 @@ export class StyleManager {
         cursor: crosshair;
         border: 2px solid ${this.config.primaryColor};
         border-radius: ${this.config.borderRadius};
+      }
+    `;
+  }
+
+  // ============================================================================
+  // COMPONENT STYLES - DEFLECTION PANEL
+  // ============================================================================
+  private generateDeflectionStyles(): string {
+    return `
+      .deflection-section {
+        margin: ${this.SPACING.sm}px 0 ${this.SPACING.md}px 0;
+        padding: ${this.SPACING.md}px;
+        background: #eef6ff;
+        border: 1px solid #c5e0ff;
+        border-radius: ${this.config.borderRadius};
+      }
+      .deflection-header {
+        font-size: ${this.FONT_SIZES.sr};
+        font-weight: 600;
+        color: #0b5394;
+        margin-bottom: ${this.SPACING.sm}px;
+      }
+      .deflection-list {
+        display: flex;
+        flex-direction: column;
+        gap: ${this.SPACING.xs}px;
+      }
+      .deflection-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: ${this.SPACING.sm}px;
+        background: #ffffff;
+        border: 1px solid #d6e6f7;
+        border-radius: ${this.config.borderRadius};
+      }
+      .deflection-card.confirmed {
+        background: #e8f4ec;
+        border-color: #5fa97a;
+      }
+      .deflection-card-body {
+        flex: 1;
+        min-width: 0;
+      }
+      .deflection-card-title {
+        font-size: ${this.FONT_SIZES.body};
+        color: #1a1a1a;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .deflection-card-status {
+        font-size: ${this.FONT_SIZES.small};
+        color: #5a5a5a;
+        margin-top: 2px;
+      }
+      .deflection-card-actions {
+        display: flex;
+        gap: ${this.SPACING.xs}px;
+        margin-left: ${this.SPACING.sm}px;
+      }
+      .deflection-btn-same,
+      .deflection-btn-different {
+        padding: 4px 10px;
+        font-size: ${this.FONT_SIZES.small};
+        border-radius: ${this.config.borderRadius};
+        border: 1px solid #c8c8c8;
+        background: #fff;
+        cursor: pointer;
+      }
+      .deflection-btn-same {
+        border-color: #5fa97a;
+        color: #2a6b46;
+      }
+      .deflection-btn-same:hover {
+        background: #e8f4ec;
+      }
+      .deflection-btn-different:hover {
+        background: #f4f3ef;
       }
     `;
   }

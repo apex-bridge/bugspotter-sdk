@@ -48,6 +48,19 @@ export class TemplateManager {
   }
 
   /**
+   * Generate the deflection container slot. Sits between the title
+   * field and the description field; lives in the DOM regardless of
+   * whether deflection is enabled so the cache initializer can find
+   * it. `display:none` is the default — `DeflectionDisplay.render`
+   * flips it on when matches arrive.
+   */
+  generateDeflectionSection(): string {
+    return `
+      <div class="deflection-section" id="deflection-section" style="display: none;"></div>
+    `;
+  }
+
+  /**
    * Generate modal header
    */
   private generateHeader(): string {
@@ -67,6 +80,7 @@ export class TemplateManager {
       <div class="body">
         <form class="form">
           ${this.generateTitleField()}
+          ${this.generateDeflectionSection()}
           ${this.generateDescriptionField()}
           ${this.config.showScreenshot && screenshotDataUrl ? this.generateScreenshotSection(screenshotDataUrl) : ''}
           ${this.generatePIISection()}

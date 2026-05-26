@@ -63,7 +63,7 @@
   },
   "homepage": "https://github.com/apex-bridge/bugspotter-sdk#readme",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=20.19.0"
   },
   "publishConfig": {
     "access": "public",
@@ -87,6 +87,7 @@
     "rrweb-snapshot": "2.0.0-alpha.4"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
     "@playwright/test": "^1.48.0",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
@@ -97,11 +98,11 @@
     "@typescript-eslint/parser": "^8.18.2",
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
-    "eslint": "^9.17.0",
+    "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.2.1",
     "happy-dom": "^20.0.2",
-    "jsdom": "^24.1.0",
+    "jsdom": "^29.1.1",
     "lint-staged": "^16.4.0",
     "prettier": "^3.4.2",
     "rollup": "^4.55.1",

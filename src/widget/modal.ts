@@ -77,6 +77,10 @@ export class BugReportModal {
   // Deflection (optional — only initialised when options.deflection set)
   private deflectionApi: DeflectionApi | null = null;
   private deflectionDisplay: DeflectionDisplay | null = null;
+  // Monotonic counter discarding stale probe resolves — superseded
+  // queries resolve to [] via DeflectionApi's leak guard; without
+  // this, those empty resolves would clear matches mid-keystroke.
+  private deflectionQueryCount = 0;
   // Tracks which canonical the user confirmed via the deflection
   // chip, if any. Read at submit time. Distinct from form input
   // state — it's never written into the title/description fields.
@@ -410,7 +414,11 @@ export class BugReportModal {
       return;
     }
     const display = this.deflectionDisplay;
+    const queryId = ++this.deflectionQueryCount;
     void this.deflectionApi.query(title).then((matches) => {
+      if (queryId !== this.deflectionQueryCount) {
+        return;
+      }
       // The display owns its own state for which chip the user
       // confirmed; here we just hand it the latest match set.
       display.render(matches);

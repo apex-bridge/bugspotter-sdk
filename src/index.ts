@@ -360,7 +360,7 @@ export class BugSpotter {
           report,
           deflected_to_canonical_id: deflectedToCanonicalId ?? null,
         };
-        logger.log('Submitting bug:', { ...payload, report });
+        logger.log('Submitting bug:', payload);
 
         // Send to endpoint if configured
         if (this.config.endpoint) {

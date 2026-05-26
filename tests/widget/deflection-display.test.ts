@@ -174,4 +174,26 @@ describe('DeflectionDisplay', () => {
     expect(container.querySelector('script')).toBeNull();
     expect(container.textContent).toContain('<script>alert(1)</script>');
   });
+
+  it('escapes quotes in canonical_id (no attribute injection)', () => {
+    // canonical_id is interpolated into data-canonical-id="..." — a
+    // textContent-based escape would NOT escape ", letting an attacker
+    // break out and inject onclick=. Regression guard for the regex
+    // escape that explicitly covers all 5 HTML chars.
+    display.render([
+      {
+        canonical_id: 'bug" onclick="alert(1)',
+        title: 'Whatever',
+        status: 'open',
+        similarity: 0.9,
+      },
+    ]);
+    const card = container.querySelector('.deflection-card');
+    expect(card).not.toBeNull();
+    expect(card?.getAttribute('onclick')).toBeNull();
+    // Raw attribute string should contain the escaped quote, not a
+    // broken-out attribute.
+    expect(card?.outerHTML).toContain('&quot;');
+    expect(card?.outerHTML).not.toContain(' onclick="alert');
+  });
 });

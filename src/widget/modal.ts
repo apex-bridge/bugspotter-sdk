@@ -420,7 +420,11 @@ export class BugReportModal {
     }
     const queryId = ++this.deflectionQueryCount;
     void this.deflectionApi
-      .query(title)
+      // Trim before sending — DeflectionApi already short-circuits
+      // whitespace-only inputs in its length check, but sends the
+      // raw title to the backend on fetch. Embedding model gets
+      // cleaner input this way.
+      .query(title.trim())
       .then((matches) => {
         // Bail if a newer query has been issued OR the modal has been
         // closed since we fired (close() nulls deflectionDisplay).

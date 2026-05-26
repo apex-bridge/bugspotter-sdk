@@ -5,6 +5,8 @@ import { FormValidator, type FormData } from './components/form-validator';
 import { PIIDetectionDisplay } from './components/pii-detection-display';
 import { RedactionCanvas } from './components/redaction-canvas';
 import { ScreenshotProcessor } from './components/screenshot-processor';
+import { DeflectionDisplay } from './components/deflection-display';
+import { DeflectionApi } from '@bugspotter/common';
 import { createSanitizer } from '../utils/sanitize';
 import { getLogger } from '../utils/logger';
 
@@ -13,6 +15,13 @@ const logger = getLogger();
 export interface BugReportData {
   title: string;
   description?: string;
+  /**
+   * Set by the deflection panel when the user confirmed "yes, this
+   * is the same as #X". Forwarded to the backend's `/api/v1/reports`
+   * POST as `deflected_to_canonical_id`. `null` / undefined when the
+   * user didn't deflect.
+   */
+  deflectedToCanonicalId?: string | null;
 }
 
 export interface PIIDetection {
@@ -20,10 +29,29 @@ export interface PIIDetection {
   count: number;
 }
 
+/**
+ * Optional deflection configuration — when provided, the modal wires
+ * the title input to a debounced similarity probe and renders an
+ * inline match panel. Modal stays fully functional when absent.
+ */
+export interface DeflectionModalConfig {
+  endpoint: string;
+  apiKey: string;
+  debounceMs?: number;
+  maxMatches?: number;
+}
+
 export interface BugReportModalOptions {
   onSubmit: (data: BugReportData) => void | Promise<void>;
   onProgress?: (message: string) => void;
   onClose?: () => void;
+  /**
+   * If set, the modal enables in-widget deflection. Failures in the
+   * probe (network, timeout, intelligence disabled) silently render
+   * zero matches — the form's input values are NEVER touched by the
+   * deflection flow, so user-typed text cannot be lost.
+   */
+  deflection?: DeflectionModalConfig;
 }
 
 /**
@@ -45,6 +73,18 @@ export class BugReportModal {
   private piiDisplay: PIIDetectionDisplay;
   private redactionCanvas: RedactionCanvas | null = null;
   private screenshotProcessor: ScreenshotProcessor;
+
+  // Deflection (optional — only initialised when options.deflection set)
+  private deflectionApi: DeflectionApi | null = null;
+  private deflectionDisplay: DeflectionDisplay | null = null;
+  // Monotonic counter discarding stale probe resolves — superseded
+  // queries resolve to [] via DeflectionApi's leak guard; without
+  // this, those empty resolves would clear matches mid-keystroke.
+  private deflectionQueryCount = 0;
+  // Tracks which canonical the user confirmed via the deflection
+  // chip, if any. Read at submit time. Distinct from form input
+  // state — it's never written into the title/description fields.
+  private deflectedToCanonicalId: string | null = null;
 
   // State
   private originalScreenshot: string = '';
@@ -98,6 +138,7 @@ export class BugReportModal {
 
     // Setup components
     this.setupRedactionCanvas();
+    this.setupDeflection();
     this.attachEventListeners();
 
     // Add to DOM
@@ -113,6 +154,21 @@ export class BugReportModal {
   close(): void {
     // Remove keyboard listener
     document.removeEventListener('keydown', this.handleEscapeKey);
+
+    // Cancel any in-flight or pending similarity probe and invalidate
+    // any callbacks already in-flight — without bumping the counter,
+    // a probe whose `[]` resolves just after close would still pass
+    // the queryId check in triggerDeflectionProbe.
+    this.deflectionQueryCount++;
+    if (this.deflectionApi) {
+      this.deflectionApi.cancel();
+      this.deflectionApi = null;
+    }
+    if (this.deflectionDisplay) {
+      this.deflectionDisplay.clear();
+      this.deflectionDisplay = null;
+    }
+    this.deflectedToCanonicalId = null;
 
     // Cleanup components
     if (this.redactionCanvas) {
@@ -161,6 +217,52 @@ export class BugReportModal {
     }
   }
 
+  /**
+   * Wire the deflection client + display when host opted in.
+   * Failure to construct either is silent — the modal continues to
+   * work without deflection, matching the no-leak / no-loss
+   * contract.
+   */
+  private setupDeflection(): void {
+    if (!this.options.deflection) {
+      return;
+    }
+    const elements = this.domCache.get();
+    try {
+      // Common's DeflectionApi takes a `getAuthHeaders` callback so
+      // it stays platform-agnostic (the extension reads chrome.storage
+      // at call time). The SDK has a static API key so we just close
+      // over it here. Funnel non-AbortError failures through the
+      // existing logger; AbortErrors are handled inside common.
+      const apiKey = this.options.deflection.apiKey;
+      this.deflectionApi = new DeflectionApi({
+        endpoint: this.options.deflection.endpoint,
+        getAuthHeaders: () => ({ 'X-API-Key': apiKey }),
+        debounceMs: this.options.deflection.debounceMs,
+        maxMatches: this.options.deflection.maxMatches,
+        onError: (error) => {
+          logger.debug('Deflection probe failed', {
+            errorType: error instanceof Error ? error.name : 'NonErrorThrown',
+          });
+        },
+      });
+      this.deflectionDisplay = new DeflectionDisplay(
+        elements.deflectionSection,
+        {
+          onConfirmedChange: (canonicalId) => {
+            this.deflectedToCanonicalId = canonicalId;
+          },
+        }
+      );
+    } catch (error) {
+      logger.warn('Deflection setup failed; widget continues without it', {
+        error,
+      });
+      this.deflectionApi = null;
+      this.deflectionDisplay = null;
+    }
+  }
+
   private attachEventListeners(): void {
     const elements = this.domCache.get();
 
@@ -195,7 +297,11 @@ export class BugReportModal {
 
     // Real-time validation
     elements.titleInput.addEventListener('input', () => {
-      return this.validateField('title');
+      this.validateField('title');
+      // Deflection probe runs in parallel — never blocks validation
+      // and never touches the input value. Module-level AbortController
+      // handles in-flight cancellation across rapid keystrokes.
+      this.triggerDeflectionProbe(elements.titleInput.value);
     });
     elements.descriptionTextarea.addEventListener('input', () => {
       this.validateField('description');
@@ -302,6 +408,39 @@ export class BugReportModal {
     }
   }
 
+  /**
+   * Fire a debounced similarity probe and render the matches. All
+   * failure paths inside `DeflectionApi.query` resolve to `[]`, so
+   * no try/catch needed here — the worst case is "no matches shown".
+   * Returns early when deflection is disabled (no host config).
+   */
+  private triggerDeflectionProbe(title: string): void {
+    if (!this.deflectionApi || !this.deflectionDisplay) {
+      return;
+    }
+    const queryId = ++this.deflectionQueryCount;
+    void this.deflectionApi
+      // Trim before sending — DeflectionApi already short-circuits
+      // whitespace-only inputs in its length check, but sends the
+      // raw title to the backend on fetch. Embedding model gets
+      // cleaner input this way.
+      .query(title.trim())
+      .then((matches) => {
+        // Bail if a newer query has been issued OR the modal has been
+        // closed since we fired (close() nulls deflectionDisplay).
+        if (queryId !== this.deflectionQueryCount || !this.deflectionDisplay) {
+          return;
+        }
+        this.deflectionDisplay.render(matches);
+      })
+      .catch((error) => {
+        // DeflectionApi.query is contracted to always resolve — this
+        // path only fires on a contract violation. Logged, not
+        // surfaced to the user.
+        logger.error('Deflection probe rejected:', error);
+      });
+  }
+
   private async handleSubmit(e: Event): Promise<void> {
     e.preventDefault();
 
@@ -394,6 +533,11 @@ export class BugReportModal {
     const bugReportData: BugReportData = {
       title: formData.title.trim(),
       description: formData.description?.trim(),
+      // When the deflection panel was used and the user confirmed a
+      // chip, surface the canonical id on the submit payload. Stays
+      // undefined otherwise so the backend's optional field handler
+      // doesn't tag this as a deflected submission.
+      deflectedToCanonicalId: this.deflectedToCanonicalId ?? undefined,
     };
 
     try {

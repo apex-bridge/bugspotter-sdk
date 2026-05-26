@@ -63,7 +63,7 @@
   },
   "homepage": "https://github.com/apex-bridge/bugspotter-sdk#readme",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=20.19.0"
   },
   "publishConfig": {
     "access": "public",

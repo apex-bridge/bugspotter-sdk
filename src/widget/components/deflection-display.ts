@@ -26,6 +26,10 @@ export class DeflectionDisplay {
   private container: HTMLElement;
   private callbacks: DeflectionDisplayCallbacks;
   private confirmedCanonicalId: string | null = null;
+  // Canonicals the user clicked "Different" on. Held for the lifetime
+  // of the panel so the next probe doesn't re-surface a rejected chip
+  // (server returns matches independently — local-only filter).
+  private rejectedCanonicalIds = new Set<string>();
 
   constructor(container: HTMLElement, callbacks: DeflectionDisplayCallbacks) {
     this.container = container;
@@ -38,24 +42,28 @@ export class DeflectionDisplay {
    * panel entirely.
    */
   render(matches: DeflectionMatch[]): void {
-    // If the user already confirmed and the new match set no longer
+    const activeMatches = matches.filter(
+      (m) => !this.rejectedCanonicalIds.has(m.canonical_id)
+    );
+
+    // If the user already confirmed and the active match set no longer
     // includes that canonical, drop the confirmation so we don't
     // submit a stale duplicate_of.
     if (
       this.confirmedCanonicalId &&
-      !matches.some((m) => m.canonical_id === this.confirmedCanonicalId)
+      !activeMatches.some((m) => m.canonical_id === this.confirmedCanonicalId)
     ) {
       this.confirmedCanonicalId = null;
       this.callbacks.onConfirmedChange(null);
     }
 
-    if (matches.length === 0) {
+    if (activeMatches.length === 0) {
       this.container.style.display = 'none';
       this.container.innerHTML = '';
       return;
     }
 
-    const cards = matches
+    const cards = activeMatches
       .map((m) =>
         this.renderCard(m, m.canonical_id === this.confirmedCanonicalId)
       )
@@ -67,7 +75,7 @@ export class DeflectionDisplay {
       <div class="deflection-list">${cards}</div>
     `;
 
-    this.attachListeners(matches);
+    this.attachListeners(activeMatches);
   }
 
   /**
@@ -75,6 +83,7 @@ export class DeflectionDisplay {
    */
   clear(): void {
     this.confirmedCanonicalId = null;
+    this.rejectedCanonicalIds.clear();
     this.container.style.display = 'none';
     this.container.innerHTML = '';
   }
@@ -143,11 +152,12 @@ export class DeflectionDisplay {
   }
 
   private handleReject(canonicalId: string, matches: DeflectionMatch[]): void {
-    // "Different" hides this specific match from the current panel.
-    // Useful when one chip is clearly wrong but others might still
-    // match. We don't propagate this signal back to the API in v1.
-    const filtered = matches.filter((m) => m.canonical_id !== canonicalId);
-    this.render(filtered);
+    // "Different" persistently hides this match for the lifetime of
+    // the panel — subsequent probes that re-surface it from the
+    // server are filtered out in render(). We don't propagate this
+    // signal back to the API in v1.
+    this.rejectedCanonicalIds.add(canonicalId);
+    this.render(matches);
   }
 
   private escapeHtml(text: string): string {

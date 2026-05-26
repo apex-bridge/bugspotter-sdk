@@ -155,13 +155,18 @@ export class BugReportModal {
     // Remove keyboard listener
     document.removeEventListener('keydown', this.handleEscapeKey);
 
-    // Cancel any in-flight or pending similarity probe so the modal
-    // doesn't try to render into a detached DOM on a slow response.
+    // Cancel any in-flight or pending similarity probe and invalidate
+    // any callbacks already in-flight — without bumping the counter,
+    // a probe whose `[]` resolves just after close would still pass
+    // the queryId check in triggerDeflectionProbe.
+    this.deflectionQueryCount++;
     if (this.deflectionApi) {
       this.deflectionApi.cancel();
+      this.deflectionApi = null;
     }
     if (this.deflectionDisplay) {
       this.deflectionDisplay.clear();
+      this.deflectionDisplay = null;
     }
     this.deflectedToCanonicalId = null;
 
@@ -413,16 +418,23 @@ export class BugReportModal {
     if (!this.deflectionApi || !this.deflectionDisplay) {
       return;
     }
-    const display = this.deflectionDisplay;
     const queryId = ++this.deflectionQueryCount;
-    void this.deflectionApi.query(title).then((matches) => {
-      if (queryId !== this.deflectionQueryCount) {
-        return;
-      }
-      // The display owns its own state for which chip the user
-      // confirmed; here we just hand it the latest match set.
-      display.render(matches);
-    });
+    void this.deflectionApi
+      .query(title)
+      .then((matches) => {
+        // Bail if a newer query has been issued OR the modal has been
+        // closed since we fired (close() nulls deflectionDisplay).
+        if (queryId !== this.deflectionQueryCount || !this.deflectionDisplay) {
+          return;
+        }
+        this.deflectionDisplay.render(matches);
+      })
+      .catch((error) => {
+        // DeflectionApi.query is contracted to always resolve — this
+        // path only fires on a contract violation. Logged, not
+        // surfaced to the user.
+        logger.error('Deflection probe rejected:', error);
+      });
   }
 
   private async handleSubmit(e: Event): Promise<void> {

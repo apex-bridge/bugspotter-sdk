@@ -125,6 +125,37 @@ describe('DeflectionDisplay', () => {
     expect(cards[0].getAttribute('data-canonical-id')).toBe('bug-2');
   });
 
+  it('rejected chip stays gone across re-renders (server re-surfaces it)', () => {
+    display.render(MATCHES);
+    container
+      .querySelector<HTMLButtonElement>(
+        '.deflection-card[data-canonical-id="bug-1"] [data-action="reject"]'
+      )
+      ?.click();
+    // Next probe returns the full set again (server has no memory of
+    // the user's reject). bug-1 must still be filtered out locally.
+    display.render(MATCHES);
+    const ids = Array.from(container.querySelectorAll('.deflection-card')).map(
+      (c) => c.getAttribute('data-canonical-id')
+    );
+    expect(ids).toEqual(['bug-2']);
+  });
+
+  it('clear() resets rejections (modal close → reopen scenario)', () => {
+    display.render(MATCHES);
+    container
+      .querySelector<HTMLButtonElement>(
+        '.deflection-card[data-canonical-id="bug-1"] [data-action="reject"]'
+      )
+      ?.click();
+    display.clear();
+    display.render(MATCHES);
+    const ids = Array.from(container.querySelectorAll('.deflection-card')).map(
+      (c) => c.getAttribute('data-canonical-id')
+    );
+    expect(ids).toEqual(['bug-1', 'bug-2']);
+  });
+
   it('drops a stale confirmation if the new match set no longer includes it', () => {
     display.render(MATCHES);
     container

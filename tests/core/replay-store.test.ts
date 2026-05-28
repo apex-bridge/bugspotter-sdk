@@ -151,6 +151,50 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('transient failure recovery', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('retries on the next op after a transient open failure', async () => {
+      // Simulate transient unavailability: indexedDB is undefined for
+      // the first open attempt. Without nulling dbPromise on failure,
+      // the cached resolved-to-null promise would permanently disable
+      // storage for the page's lifetime — bad for long-lived SPAs
+      // where the blocking condition (e.g. another tab) eventually
+      // clears.
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+      const store = new IndexedDbStorage({
+        dbName: `bugspotter-recover-${++dbCounter}`,
+      });
+      // First op fails because indexedDB is missing.
+      expect(await store.readAll(REPLAY_STORE)).toEqual([]);
+
+      // Restore indexedDB — simulates the transient condition clearing.
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+
+      // Next op must attempt a fresh open and succeed.
+      await store.append(REPLAY_STORE, { event: 'after-recovery' });
+      const after = await store.readAll<{ event: string }>(REPLAY_STORE);
+      expect(after).toEqual([{ event: 'after-recovery' }]);
+      store.close();
+    });
+  });
+
   describe('store schema drift safety', () => {
     it('soft-fails when reading from a non-existent store', async () => {
       // Schema only declares REPLAY_STORE + LOG_STORE. Asking for

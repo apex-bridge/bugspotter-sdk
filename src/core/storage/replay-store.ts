@@ -70,49 +70,71 @@ export class IndexedDbStorage implements AsyncStorage {
     this.dbName = options.dbName ?? DB_NAME;
   }
 
-  private openDb(): Promise<IDBDatabase | null> {
+  private async openDb(): Promise<IDBDatabase | null> {
     if (this.dbPromise) {
       return this.dbPromise;
     }
-    this.dbPromise = new Promise<IDBDatabase | null>((resolve) => {
-      if (typeof indexedDB === 'undefined') {
-        // SSR or genuinely-broken env. Soft-fail.
-        resolve(null);
-        return;
-      }
-      let request: IDBOpenDBRequest;
-      try {
-        request = indexedDB.open(this.dbName, DB_VERSION);
-      } catch (err) {
-        logger.warn('IndexedDB open threw, soft-failing:', err);
-        resolve(null);
-        return;
-      }
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains(REPLAY_STORE)) {
-          db.createObjectStore(REPLAY_STORE, { autoIncrement: true });
+    // Open with an async IIFE so the dbPromise field is set
+    // synchronously (dedupes concurrent openDb calls), and any
+    // post-resolve null-out happens after the promise has settled
+    // — assigning to this.dbPromise inside the Promise executor
+    // doesn't work because the outer assignment hasn't completed
+    // yet at that point.
+    const promise = (async (): Promise<IDBDatabase | null> => {
+      return new Promise<IDBDatabase | null>((resolve) => {
+        if (typeof indexedDB === 'undefined') {
+          resolve(null);
+          return;
         }
-        if (!db.objectStoreNames.contains(LOG_STORE)) {
-          db.createObjectStore(LOG_STORE, { autoIncrement: true });
+        let request: IDBOpenDBRequest;
+        try {
+          request = indexedDB.open(this.dbName, DB_VERSION);
+        } catch (err) {
+          logger.warn('IndexedDB open threw, soft-failing:', err);
+          resolve(null);
+          return;
         }
-      };
-      request.onsuccess = () => {
-        resolve(request.result);
-      };
-      request.onerror = () => {
-        logger.warn('IndexedDB open failed, soft-failing:', request.error);
-        resolve(null);
-      };
-      request.onblocked = () => {
-        // Another tab holds an older version open. Don't hang the
-        // capture flow — soft-fail; the SDK will continue without
-        // persistence and try again on next page load.
-        logger.warn('IndexedDB open blocked (other tab holds older version)');
-        resolve(null);
-      };
-    });
-    return this.dbPromise;
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(REPLAY_STORE)) {
+            db.createObjectStore(REPLAY_STORE, { autoIncrement: true });
+          }
+          if (!db.objectStoreNames.contains(LOG_STORE)) {
+            db.createObjectStore(LOG_STORE, { autoIncrement: true });
+          }
+        };
+        request.onsuccess = () => {
+          resolve(request.result);
+        };
+        // preventDefault on error events stops the uncaught-IDB-error
+        // console output that host-app monitoring (Sentry, Datadog)
+        // often picks up via console interception.
+        request.onerror = (event) => {
+          logger.warn('IndexedDB open failed, soft-failing:', request.error);
+          event.preventDefault();
+          resolve(null);
+        };
+        request.onblocked = (event) => {
+          // Another tab holds an older version open. Don't hang the
+          // capture flow — soft-fail; the SDK will continue without
+          // persistence and try again on next page load or op.
+          logger.warn('IndexedDB open blocked (other tab holds older version)');
+          event.preventDefault();
+          resolve(null);
+        };
+      });
+    })();
+    this.dbPromise = promise;
+
+    const db = await promise;
+    // Null the cached promise on failure so a long-lived SPA can
+    // retry on the next op once the blocking condition clears
+    // (other tab closed, polyfill loaded, etc.). Successful opens
+    // stay cached for the page's lifetime.
+    if (!db) {
+      this.dbPromise = null;
+    }
+    return db;
   }
 
   async append<T>(store: string, value: T): Promise<void> {
@@ -151,8 +173,9 @@ export class IndexedDbStorage implements AsyncStorage {
       }
       const req = tx.objectStore(store).getAll();
       req.onsuccess = () => resolve((req.result ?? []) as T[]);
-      req.onerror = () => {
+      req.onerror = (event) => {
         logger.warn(`IndexedDB readAll(${store}) request failed:`, req.error);
+        event.preventDefault();
         resolve([]);
       };
     });
@@ -191,8 +214,9 @@ export class IndexedDbStorage implements AsyncStorage {
         return;
       }
       tx.oncomplete = () => resolve();
-      tx.onerror = () => {
+      tx.onerror = (event) => {
         logger.warn(`IndexedDB tx(${storeName}) error:`, tx.error);
+        event.preventDefault();
         // Resolve rather than reject — soft-fail contract.
         resolve();
       };
@@ -203,8 +227,17 @@ export class IndexedDbStorage implements AsyncStorage {
       try {
         work(tx.objectStore(storeName));
       } catch (err) {
+        // Catching the sync throw stops the spec's implicit
+        // "abort transaction on uncaught exception" behavior, so
+        // any successful ops earlier in this tx (e.g. appendBatch
+        // items before a non-serializable one) could otherwise
+        // still commit. Explicit abort discards them.
         logger.warn(`IndexedDB tx(${storeName}) work threw:`, err);
-        // The tx will fire onerror/onabort and resolve via those handlers.
+        try {
+          tx.abort();
+        } catch {
+          // Already aborted / finished — fine.
+        }
       }
     });
   }

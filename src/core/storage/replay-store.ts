@@ -100,12 +100,28 @@ export class IndexedDbStorage implements AsyncStorage {
       // future upgrades.
       let abandoned = false;
       request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains(REPLAY_STORE)) {
-          db.createObjectStore(REPLAY_STORE, { autoIncrement: true });
-        }
-        if (!db.objectStoreNames.contains(LOG_STORE)) {
-          db.createObjectStore(LOG_STORE, { autoIncrement: true });
+        // createObjectStore can throw on storage exhaustion or
+        // schema corruption. The spec's auto-abort on uncaught
+        // exception fires our onerror (with preventDefault), but
+        // window.onerror typically fires BEFORE the request's
+        // error event and isn't suppressed by it — host monitoring
+        // (Sentry, Datadog) would still pick up the throw. Wrap +
+        // explicit abort keeps the failure off the global surface.
+        try {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(REPLAY_STORE)) {
+            db.createObjectStore(REPLAY_STORE, { autoIncrement: true });
+          }
+          if (!db.objectStoreNames.contains(LOG_STORE)) {
+            db.createObjectStore(LOG_STORE, { autoIncrement: true });
+          }
+        } catch (err) {
+          logger.warn('IndexedDB upgrade failed, aborting:', err);
+          try {
+            request.transaction?.abort();
+          } catch {
+            // Already aborted / inactive — fine.
+          }
         }
       };
       request.onsuccess = () => {
@@ -226,16 +242,28 @@ export class IndexedDbStorage implements AsyncStorage {
         resolve();
         return;
       }
-      tx.oncomplete = () => resolve();
-      tx.onerror = (event) => {
-        logger.warn(`IndexedDB tx(${storeName}) error:`, tx.error);
-        event.preventDefault();
-        // Resolve rather than reject — soft-fail contract.
+      // A failing tx fires BOTH onerror and onabort sequentially —
+      // a `settled` flag dedupes the log so host monitoring sees
+      // one warning per underlying failure, not two.
+      let settled = false;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
         resolve();
       };
+      tx.oncomplete = () => settle();
+      tx.onerror = (event) => {
+        if (!settled) {
+          logger.warn(`IndexedDB tx(${storeName}) error:`, tx.error);
+        }
+        event.preventDefault();
+        settle();
+      };
       tx.onabort = () => {
-        logger.warn(`IndexedDB tx(${storeName}) aborted:`, tx.error);
-        resolve();
+        if (!settled) {
+          logger.warn(`IndexedDB tx(${storeName}) aborted:`, tx.error);
+        }
+        settle();
       };
       try {
         work(tx.objectStore(storeName));

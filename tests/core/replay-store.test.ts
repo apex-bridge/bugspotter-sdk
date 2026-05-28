@@ -332,6 +332,107 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('onupgradeneeded throw containment', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('contains createObjectStore throws inside the handler (no leak)', async () => {
+      // Realistic case: storage exhaustion → createObjectStore throws
+      // synchronously during the upgrade. Without try/catch the
+      // throw leaves the handler uncaught; spec auto-aborts the
+      // tx and fires onerror with preventDefault, but window.onerror
+      // typically fires BEFORE the request's error event and isn't
+      // suppressed by it — host monitoring would pick it up.
+      const abortFn = vi.fn();
+      const fakeDb = {
+        objectStoreNames: { contains: () => false },
+        createObjectStore: () => {
+          throw new Error('storage exhausted');
+        },
+        close: () => undefined,
+      };
+      const fakeReq: {
+        result: unknown;
+        transaction?: { abort: () => void };
+        onupgradeneeded?: () => void;
+        onsuccess?: () => void;
+        onerror?: (ev: { preventDefault: () => void }) => void;
+        onblocked?: (ev: { preventDefault: () => void }) => void;
+      } = {
+        result: fakeDb,
+        transaction: { abort: abortFn },
+      };
+      const fakeOpen = vi.fn(() => {
+        queueMicrotask(() => {
+          // Spec ordering: onupgradeneeded fires first.
+          fakeReq.onupgradeneeded?.();
+          // The aborted upgrade tx surfaces as onerror on the request.
+          fakeReq.onerror?.({ preventDefault: () => undefined });
+        });
+        return fakeReq;
+      });
+
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'upgrade-throw' });
+      // If the throw escaped the handler, this op would reject /
+      // hang. It must resolve cleanly (soft-fail).
+      await expect(storage.readAll(REPLAY_STORE)).resolves.toEqual([]);
+      // The handler must have explicitly aborted the upgrade tx.
+      expect(abortFn).toHaveBeenCalledTimes(1);
+      storage.close();
+    });
+  });
+
+  describe('tx failure log dedup', () => {
+    it('does not log both onerror and onabort for a single tx failure', async () => {
+      // For a tx failing due to a request error, the spec fires
+      // both onerror and onabort sequentially. Without the
+      // settled flag, host monitoring sees two warnings for one
+      // underlying failure.
+      const warnSpy = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        const storage = makeStorage();
+        await storage.append(REPLAY_STORE, { x: 1 });
+
+        // Trigger a work-throw path: a function isn't structured-
+        // cloneable. The work callback's add() throws, the catch
+        // calls tx.abort() which fires onabort (and onerror).
+        warnSpy.mockClear();
+
+        await storage.appendBatch(REPLAY_STORE, [(() => {}) as any]);
+
+        // Count the two tx-handler logs specifically. If dedup
+        // works, at most one fires for this single failure.
+        const txWarns = warnSpy.mock.calls.filter((call) => {
+          const first = call[0];
+          return (
+            typeof first === 'string' &&
+            first.includes('tx(') &&
+            (first.includes('error:') || first.includes('aborted:'))
+          );
+        });
+        expect(txWarns.length).toBeLessThanOrEqual(1);
+        storage.close();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  });
+
   describe('store schema drift safety', () => {
     it('soft-fails when reading from a non-existent store', async () => {
       // Schema only declares REPLAY_STORE + LOG_STORE. Asking for

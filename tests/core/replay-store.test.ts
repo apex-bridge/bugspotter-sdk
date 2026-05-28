@@ -10,7 +10,7 @@
  *    instances in the same test file)
  */
 import 'fake-indexeddb/auto';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   IndexedDbStorage,
   REPLAY_STORE,
@@ -192,6 +192,143 @@ describe('IndexedDbStorage', () => {
       const after = await store.readAll<{ event: string }>(REPLAY_STORE);
       expect(after).toEqual([{ event: 'after-recovery' }]);
       store.close();
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // The next two describes use targeted mocks of the IndexedDB
+  // surface rather than fake-indexeddb. The failure modes we're
+  // pinning (tx.abort throwing AND no onabort firing, blocked →
+  // late onsuccess) aren't deterministic in fake-indexeddb because
+  // they depend on real-browser event-loop quirks the simulator
+  // intentionally smooths over. Mocking the IDB primitives lets us
+  // pin exactly the bad-state sequence we want to prove handled.
+  // ───────────────────────────────────────────────────────────────
+
+  describe('Promise settlement when tx.abort itself throws', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('resolves (does not hang) when work throws AND tx.abort throws AND no onabort fires', async () => {
+      // The sequence that hangs without the unconditional resolve():
+      //   1. work() throws synchronously (e.g. structured-clone error)
+      //   2. catch calls tx.abort() — which itself throws
+      //   3. No async tx event (onabort / onerror) fires
+      // Without `resolve()` in the catch, the Promise never settles
+      // and the capture-flow caller hangs forever. This test would
+      // time out if the fix regresses.
+      const fakeObjectStore = {
+        add: () => {
+          throw new Error('structured-clone error');
+        },
+        clear: () => undefined,
+      };
+      const fakeTx = {
+        objectStore: () => fakeObjectStore,
+        abort: () => {
+          throw new Error('tx already inactive');
+        },
+        oncomplete: null as ((this: unknown, ev: unknown) => void) | null,
+        onerror: null as ((this: unknown, ev: unknown) => void) | null,
+        onabort: null as ((this: unknown, ev: unknown) => void) | null,
+        error: null,
+      };
+      const fakeDb = {
+        transaction: () => fakeTx,
+        close: () => undefined,
+        objectStoreNames: { contains: () => true },
+      };
+      const openCall: { req: { onsuccess?: () => void; result: unknown } } = {
+        req: { result: fakeDb },
+      };
+      const fakeOpen = vi.fn(() => {
+        // Fire onsuccess on the next microtask so the caller has
+        // a chance to wire up onsuccess.
+        queueMicrotask(() => openCall.req.onsuccess?.());
+        return openCall.req;
+      });
+
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'hangtest' });
+      // If the fix regresses, this hangs forever. The test's
+      // timeout (vitest default 5s) is the floor; we assert
+      // resolution to make the failure clear.
+      await expect(
+        storage.append(REPLAY_STORE, { x: 1 })
+      ).resolves.toBeUndefined();
+      storage.close();
+    });
+  });
+
+  describe('late-arrival db close after onblocked → onsuccess', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('closes the db when onsuccess fires after onblocked already resolved', async () => {
+      // The leak path:
+      //   1. onblocked fires → we soft-fail (resolve null) and the
+      //      caller walks away
+      //   2. The open REQUEST stays queued in the browser
+      //   3. The blocking older connection closes — onsuccess fires
+      //      with a real IDBDatabase
+      //   4. Without the abandoned flag, that db handle leaks open
+      //      and holds the older version, blocking future upgrades
+      const closeFn = vi.fn();
+      const fakeDb = {
+        close: closeFn,
+        objectStoreNames: { contains: () => true },
+      };
+      const fakeReq: {
+        result: unknown;
+        onsuccess?: () => void;
+        onerror?: (ev: { preventDefault: () => void }) => void;
+        onblocked?: (ev: { preventDefault: () => void }) => void;
+        onupgradeneeded?: () => void;
+      } = { result: fakeDb };
+      const fakeOpen = vi.fn(() => {
+        queueMicrotask(() =>
+          fakeReq.onblocked?.({ preventDefault: () => undefined })
+        );
+        return fakeReq;
+      });
+
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'leaktest' });
+      // First op: onblocked fires → soft-fail to []. abandoned set.
+      expect(await storage.readAll(REPLAY_STORE)).toEqual([]);
+      expect(closeFn).not.toHaveBeenCalled();
+
+      // Now simulate the late onsuccess that the browser will fire
+      // when the blocking connection closes.
+      fakeReq.onsuccess?.();
+
+      // The late-arrival db handle must be closed, not leaked.
+      expect(closeFn).toHaveBeenCalledTimes(1);
+      storage.close();
     });
   });
 

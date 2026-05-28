@@ -433,6 +433,66 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('versionchange handler', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('closes the connection when another tab triggers versionchange', async () => {
+      // Multi-tab upgrade: Tab B opens at DB_VERSION+1 → the
+      // browser fires versionchange on Tab A's connection. Without
+      // a handler, Tab A's connection stays open and Tab B's
+      // upgrade is blocked forever. With the handler we install in
+      // onsuccess, Tab A voluntarily closes and Tab B can proceed.
+      const closeFn = vi.fn();
+      const fakeDb: {
+        objectStoreNames: { contains: () => boolean };
+        close: () => void;
+        onversionchange?: () => void;
+      } = {
+        objectStoreNames: { contains: () => true },
+        close: closeFn,
+      };
+      const successReq: {
+        result: typeof fakeDb;
+        onsuccess?: () => void;
+        onerror?: (ev: { preventDefault: () => void }) => void;
+        onblocked?: (ev: { preventDefault: () => void }) => void;
+        onupgradeneeded?: () => void;
+      } = { result: fakeDb };
+      const fakeOpen = vi.fn(() => {
+        queueMicrotask(() => successReq.onsuccess?.());
+        return successReq;
+      });
+
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'versionchange' });
+      // Drive an open so onsuccess installs the versionchange handler.
+      // readAll's tx will fail against our fakeDb, but we only care
+      // about the open path here.
+      await storage.readAll(REPLAY_STORE).catch(() => undefined);
+
+      // Now fire versionchange the way the browser would when
+      // another tab upgrades the DB. The handler should close
+      // this connection.
+      expect(fakeDb.onversionchange).toBeDefined();
+      fakeDb.onversionchange?.();
+      expect(closeFn).toHaveBeenCalledTimes(1);
+      storage.close();
+    });
+  });
+
   describe('store schema drift safety', () => {
     it('soft-fails when reading from a non-existent store', async () => {
       // Schema only declares REPLAY_STORE + LOG_STORE. Asking for

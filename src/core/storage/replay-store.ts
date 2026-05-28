@@ -129,7 +129,20 @@ export class IndexedDbStorage implements AsyncStorage {
           request.result.close();
           return;
         }
-        resolve(request.result);
+        const db = request.result;
+        // Another tab opening the DB at a higher version triggers
+        // versionchange on every existing connection. If we don't
+        // close ours, the other tab's upgrade hangs (onblocked
+        // forever). Voluntarily closing lets the new version win;
+        // we null dbPromise so the next op on THIS instance opens
+        // fresh against the new schema.
+        db.onversionchange = () => {
+          db.close();
+          if (this.dbPromise === promise) {
+            this.dbPromise = null;
+          }
+        };
+        resolve(db);
       };
       // preventDefault on error events stops the uncaught-IDB-error
       // console output that host-app monitoring (Sentry, Datadog)
@@ -160,7 +173,14 @@ export class IndexedDbStorage implements AsyncStorage {
     // retry on the next op once the blocking condition clears
     // (other tab closed, polyfill loaded, etc.). Successful opens
     // stay cached for the page's lifetime.
-    if (!db) {
+    //
+    // Identity check: only null if dbPromise is STILL this
+    // promise. Two concurrent openDb calls that both await a
+    // failed promiseA might race — one finishes the cleanup,
+    // its caller retries and sets dbPromise = promiseB, then
+    // the second one finishes and would otherwise null promiseB
+    // out from under the retry.
+    if (!db && this.dbPromise === promise) {
       this.dbPromise = null;
     }
     return db;

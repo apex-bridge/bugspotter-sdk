@@ -74,71 +74,69 @@ export class IndexedDbStorage implements AsyncStorage {
     if (this.dbPromise) {
       return this.dbPromise;
     }
-    // Open with an async IIFE so the dbPromise field is set
-    // synchronously (dedupes concurrent openDb calls), and any
-    // post-resolve null-out happens after the promise has settled
-    // — assigning to this.dbPromise inside the Promise executor
-    // doesn't work because the outer assignment hasn't completed
-    // yet at that point.
-    const promise = (async (): Promise<IDBDatabase | null> => {
-      return new Promise<IDBDatabase | null>((resolve) => {
-        if (typeof indexedDB === 'undefined') {
-          resolve(null);
+    // Construct the Promise synchronously so this.dbPromise is set
+    // before any concurrent openDb() call returns from the cache
+    // check above. The post-settle null-out happens below, after
+    // `await promise` — nulling inside the executor doesn't work
+    // because the outer `this.dbPromise = promise` hasn't completed
+    // yet at that point and would overwrite it.
+    const promise = new Promise<IDBDatabase | null>((resolve) => {
+      if (typeof indexedDB === 'undefined') {
+        resolve(null);
+        return;
+      }
+      let request: IDBOpenDBRequest;
+      try {
+        request = indexedDB.open(this.dbName, DB_VERSION);
+      } catch (err) {
+        logger.warn('IndexedDB open threw, soft-failing:', err);
+        resolve(null);
+        return;
+      }
+      // Flipped on the abandonment paths (blocked / error). If
+      // the browser later resolves the request anyway (e.g. the
+      // blocking older connection closes), we close the late-
+      // arriving db handle so it doesn't leak open and block
+      // future upgrades.
+      let abandoned = false;
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(REPLAY_STORE)) {
+          db.createObjectStore(REPLAY_STORE, { autoIncrement: true });
+        }
+        if (!db.objectStoreNames.contains(LOG_STORE)) {
+          db.createObjectStore(LOG_STORE, { autoIncrement: true });
+        }
+      };
+      request.onsuccess = () => {
+        if (abandoned) {
+          request.result.close();
           return;
         }
-        let request: IDBOpenDBRequest;
-        try {
-          request = indexedDB.open(this.dbName, DB_VERSION);
-        } catch (err) {
-          logger.warn('IndexedDB open threw, soft-failing:', err);
-          resolve(null);
-          return;
-        }
-        // Flipped on the abandonment paths (blocked / error). If
-        // the browser later resolves the request anyway (e.g. the
-        // blocking older connection closes), we close the late-
-        // arriving db handle so it doesn't leak open and block
-        // future upgrades.
-        let abandoned = false;
-        request.onupgradeneeded = () => {
-          const db = request.result;
-          if (!db.objectStoreNames.contains(REPLAY_STORE)) {
-            db.createObjectStore(REPLAY_STORE, { autoIncrement: true });
-          }
-          if (!db.objectStoreNames.contains(LOG_STORE)) {
-            db.createObjectStore(LOG_STORE, { autoIncrement: true });
-          }
-        };
-        request.onsuccess = () => {
-          if (abandoned) {
-            request.result.close();
-            return;
-          }
-          resolve(request.result);
-        };
-        // preventDefault on error events stops the uncaught-IDB-error
-        // console output that host-app monitoring (Sentry, Datadog)
-        // often picks up via console interception.
-        request.onerror = (event) => {
-          logger.warn('IndexedDB open failed, soft-failing:', request.error);
-          event.preventDefault();
-          abandoned = true;
-          resolve(null);
-        };
-        request.onblocked = (event) => {
-          // Another tab holds an older version open. Don't hang the
-          // capture flow — soft-fail; the SDK will continue without
-          // persistence and try again on next page load or op. The
-          // request stays queued in the browser; if the older
-          // connection closes later, onsuccess will fire with a db
-          // handle that the abandoned flag tells us to close.
-          logger.warn('IndexedDB open blocked (other tab holds older version)');
-          event.preventDefault();
-          abandoned = true;
-          resolve(null);
-        };
-      });
-    })();
+        resolve(request.result);
+      };
+      // preventDefault on error events stops the uncaught-IDB-error
+      // console output that host-app monitoring (Sentry, Datadog)
+      // often picks up via console interception.
+      request.onerror = (event) => {
+        logger.warn('IndexedDB open failed, soft-failing:', request.error);
+        event.preventDefault();
+        abandoned = true;
+        resolve(null);
+      };
+      request.onblocked = (event) => {
+        // Another tab holds an older version open. Don't hang the
+        // capture flow — soft-fail; the SDK will continue without
+        // persistence and try again on next page load or op. The
+        // request stays queued in the browser; if the older
+        // connection closes later, onsuccess will fire with a db
+        // handle that the abandoned flag tells us to close.
+        logger.warn('IndexedDB open blocked (other tab holds older version)');
+        event.preventDefault();
+        abandoned = true;
+        resolve(null);
+      };
+    });
     this.dbPromise = promise;
 
     const db = await promise;
@@ -156,7 +154,7 @@ export class IndexedDbStorage implements AsyncStorage {
     const db = await this.openDb();
     if (!db) return;
     await this.runTransaction(db, store, 'readwrite', (objectStore) => {
-      objectStore.add(value as unknown as object);
+      objectStore.add(value);
     });
   }
 
@@ -166,7 +164,7 @@ export class IndexedDbStorage implements AsyncStorage {
     if (!db) return;
     await this.runTransaction(db, store, 'readwrite', (objectStore) => {
       for (const value of values) {
-        objectStore.add(value as unknown as object);
+        objectStore.add(value);
       }
     });
   }

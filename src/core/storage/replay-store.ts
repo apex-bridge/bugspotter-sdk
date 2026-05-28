@@ -94,6 +94,12 @@ export class IndexedDbStorage implements AsyncStorage {
           resolve(null);
           return;
         }
+        // Flipped on the abandonment paths (blocked / error). If
+        // the browser later resolves the request anyway (e.g. the
+        // blocking older connection closes), we close the late-
+        // arriving db handle so it doesn't leak open and block
+        // future upgrades.
+        let abandoned = false;
         request.onupgradeneeded = () => {
           const db = request.result;
           if (!db.objectStoreNames.contains(REPLAY_STORE)) {
@@ -104,6 +110,10 @@ export class IndexedDbStorage implements AsyncStorage {
           }
         };
         request.onsuccess = () => {
+          if (abandoned) {
+            request.result.close();
+            return;
+          }
           resolve(request.result);
         };
         // preventDefault on error events stops the uncaught-IDB-error
@@ -112,14 +122,19 @@ export class IndexedDbStorage implements AsyncStorage {
         request.onerror = (event) => {
           logger.warn('IndexedDB open failed, soft-failing:', request.error);
           event.preventDefault();
+          abandoned = true;
           resolve(null);
         };
         request.onblocked = (event) => {
           // Another tab holds an older version open. Don't hang the
           // capture flow — soft-fail; the SDK will continue without
-          // persistence and try again on next page load or op.
+          // persistence and try again on next page load or op. The
+          // request stays queued in the browser; if the older
+          // connection closes later, onsuccess will fire with a db
+          // handle that the abandoned flag tells us to close.
           logger.warn('IndexedDB open blocked (other tab holds older version)');
           event.preventDefault();
+          abandoned = true;
           resolve(null);
         };
       });
@@ -238,6 +253,12 @@ export class IndexedDbStorage implements AsyncStorage {
         } catch {
           // Already aborted / finished — fine.
         }
+        // Resolve unconditionally. If tx.abort threw AND neither
+        // onabort nor onerror subsequently fires, the Promise
+        // would otherwise hang forever and hang the capture flow.
+        // Promise resolve is idempotent — a later onabort call is
+        // a no-op.
+        resolve();
       }
     });
   }

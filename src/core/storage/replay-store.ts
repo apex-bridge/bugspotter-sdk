@@ -296,6 +296,7 @@ export class IndexedDbStorage implements AsyncStorage {
           `IndexedDB readAll(${store}) tx failed, soft-failing:`,
           err
         );
+        this.clearCacheIfInvalidState(db, err);
         resolve([]);
         return;
       }
@@ -316,21 +317,31 @@ export class IndexedDbStorage implements AsyncStorage {
       const results: ReadResult<T>[] = [];
       const req = tx.objectStore(store).openCursor();
       req.onsuccess = () => {
-        const cursor = req.result;
-        if (cursor) {
-          results.push({
-            key: cursor.key as number,
-            value: cursor.value as T,
-          });
-          // Check the limit AFTER push but BEFORE continuing —
-          // otherwise we'd fetch one extra record from storage
-          // only to discard it on the next onsuccess tick.
-          if (limit === undefined || results.length < limit) {
-            cursor.continue();
-            return;
+        // cursor.value is a getter that performs structured-clone
+        // deserialization — corrupted stored data can throw
+        // DataCloneError. Without this try/catch, the throw
+        // crashes the handler and settle() never fires, hanging
+        // the Promise. Resolve with whatever was readable so far.
+        try {
+          const cursor = req.result;
+          if (cursor) {
+            results.push({
+              key: cursor.key as number,
+              value: cursor.value as T,
+            });
+            // Check the limit AFTER push but BEFORE continuing —
+            // otherwise we'd fetch one extra record from storage
+            // only to discard it on the next onsuccess tick.
+            if (limit === undefined || results.length < limit) {
+              cursor.continue();
+              return;
+            }
           }
+          settle(results);
+        } catch (err) {
+          logger.warn(`IndexedDB readAll(${store}) cursor read failed:`, err);
+          settle(results);
         }
-        settle(results);
       };
       req.onerror = (event) => {
         if (!settled) {
@@ -382,6 +393,22 @@ export class IndexedDbStorage implements AsyncStorage {
     this.dbPromise = null;
   }
 
+  /**
+   * Self-heal hook: if a transaction creation throws because the
+   * connection is dead (InvalidStateError), clear the cache so
+   * the next op opens a fresh connection. Defends against the
+   * narrow window where `onclose` doesn't fire (older browsers,
+   * non-standard envs) but the connection is silently evicted.
+   */
+  private clearCacheIfInvalidState(db: IDBDatabase, err: unknown): void {
+    if (err instanceof DOMException && err.name === 'InvalidStateError') {
+      if (this.db === db) {
+        this.db = null;
+        this.dbPromise = null;
+      }
+    }
+  }
+
   private runTransaction(
     db: IDBDatabase,
     storeName: string,
@@ -395,6 +422,7 @@ export class IndexedDbStorage implements AsyncStorage {
       } catch (err) {
         // Most commonly: store doesn't exist (DB schema drift). Soft-fail.
         logger.warn(`IndexedDB tx(${storeName}) failed:`, err);
+        this.clearCacheIfInvalidState(db, err);
         resolve();
         return;
       }

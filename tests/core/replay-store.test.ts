@@ -520,6 +520,175 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('cursor read throw containment', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('resolves [] (does not hang) when cursor.value throws', async () => {
+      // cursor.value is a getter that does structured-clone
+      // deserialization — corrupted stored data can throw
+      // DataCloneError. Without try/catch in onsuccess, the throw
+      // crashes the handler and the Promise hangs forever.
+      // Targeted mock: cursor whose .value getter throws.
+      const cursor = {
+        key: 1,
+        get value(): unknown {
+          throw new DOMException('Could not deserialize', 'DataCloneError');
+        },
+        continue: () => undefined,
+      };
+      let req: {
+        result: typeof cursor | null;
+        onsuccess?: () => void;
+        onerror?: (ev: { preventDefault: () => void }) => void;
+      };
+      const fakeStore = {
+        openCursor: () => {
+          req = { result: cursor };
+          queueMicrotask(() => req.onsuccess?.());
+          return req as unknown as IDBRequest;
+        },
+      };
+      const fakeTx = {
+        objectStore: () => fakeStore,
+        oncomplete: undefined,
+        onerror: undefined,
+        onabort: undefined,
+        error: null,
+        abort: () => undefined,
+      };
+      const fakeDb = {
+        objectStoreNames: { contains: () => true },
+        close: () => undefined,
+        transaction: () => fakeTx,
+      };
+      const successReq: { result: typeof fakeDb; onsuccess?: () => void } = {
+        result: fakeDb,
+      };
+      const fakeOpen = vi.fn(() => {
+        queueMicrotask(() => successReq.onsuccess?.());
+        return successReq;
+      });
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'cursor-throw' });
+      // Without the try/catch, this would hang at the 5s timeout.
+      await expect(storage.readAll(REPLAY_STORE)).resolves.toEqual([]);
+      storage.close();
+    });
+  });
+
+  describe('self-heal on InvalidStateError', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('clears cache when db.transaction throws InvalidStateError', async () => {
+      // Browser onclose support is variable; in the gap where
+      // onclose doesn't fire but the db is silently evicted,
+      // db.transaction throws InvalidStateError. Without
+      // clearing the cache, every subsequent op hits the same
+      // dead handle. Self-heal: clear cache on this specific
+      // error, next op opens fresh.
+      let openCallNum = 0;
+      const fakeDb = {
+        objectStoreNames: { contains: () => true },
+        close: () => undefined,
+        onversionchange: undefined,
+        onclose: undefined,
+        transaction: () => {
+          // Throw the way a closed connection would.
+          throw new DOMException('Connection is closing', 'InvalidStateError');
+        },
+      };
+      const successReq: {
+        result: typeof fakeDb;
+        onsuccess?: () => void;
+      } = { result: fakeDb };
+      const fakeOpen = vi.fn(() => {
+        openCallNum++;
+        queueMicrotask(() => successReq.onsuccess?.());
+        return successReq;
+      });
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'self-heal' });
+      // First op: triggers open, then throws on transaction.
+      // Cache should be cleared by the catch.
+      await storage.readAll(REPLAY_STORE);
+      expect(openCallNum).toBe(1);
+
+      // Second op: cache was cleared → fresh open attempt.
+      await storage.readAll(REPLAY_STORE);
+      expect(openCallNum).toBeGreaterThan(1);
+      storage.close();
+    });
+
+    it('does not clear cache for unrelated errors (e.g. NotFoundError)', async () => {
+      // The cache should only be cleared on InvalidStateError. A
+      // NotFoundError (e.g. asking for a non-existent store) is
+      // a schema/usage issue, not a dead connection — the cache
+      // is still valid, subsequent ops on other stores should
+      // hit the cached db, not open a new one.
+      let openCallNum = 0;
+      let txCallNum = 0;
+      const fakeDb = {
+        objectStoreNames: { contains: () => true },
+        close: () => undefined,
+        onversionchange: undefined,
+        onclose: undefined,
+        transaction: () => {
+          txCallNum++;
+          throw new DOMException('Store not found', 'NotFoundError');
+        },
+      };
+      const successReq: {
+        result: typeof fakeDb;
+        onsuccess?: () => void;
+      } = { result: fakeDb };
+      const fakeOpen = vi.fn(() => {
+        openCallNum++;
+        queueMicrotask(() => successReq.onsuccess?.());
+        return successReq;
+      });
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'no-heal' });
+      await storage.readAll(REPLAY_STORE);
+      await storage.readAll(REPLAY_STORE);
+      // Two readAlls but only ONE open — cache stayed valid
+      // even though tx threw. Both readAlls saw the NotFoundError.
+      expect(openCallNum).toBe(1);
+      expect(txCallNum).toBe(2);
+      storage.close();
+    });
+  });
+
   describe('onclose handler', () => {
     const originalIndexedDB = globalThis.indexedDB;
 

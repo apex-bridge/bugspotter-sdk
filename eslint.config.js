@@ -78,6 +78,7 @@ export default [
         IDBOpenDBRequest: 'readonly',
         IDBRequest: 'readonly',
         IDBKeyRange: 'readonly',
+        DOMException: 'readonly',
         queueMicrotask: 'readonly',
       },
     },

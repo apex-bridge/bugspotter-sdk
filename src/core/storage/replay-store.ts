@@ -192,6 +192,19 @@ export class IndexedDbStorage implements AsyncStorage {
             this.db = null;
           }
         };
+        // onclose fires when the browser unexpectedly closes the
+        // connection — storage pressure, user clearing site data,
+        // disk eviction. Without clearing the cache, subsequent
+        // ops would soft-fail forever against the dead handle
+        // because openDb returns the still-cached promise.
+        db.onclose = () => {
+          if (this.dbPromise === promise) {
+            this.dbPromise = null;
+          }
+          if (this.db === db) {
+            this.db = null;
+          }
+        };
         resolve(db);
       };
       // preventDefault on error events stops the uncaught-IDB-error
@@ -297,15 +310,20 @@ export class IndexedDbStorage implements AsyncStorage {
       const req = tx.objectStore(store).openCursor();
       req.onsuccess = () => {
         const cursor = req.result;
-        if (cursor && (limit === undefined || results.length < limit)) {
+        if (cursor) {
           results.push({
             key: cursor.key as number,
             value: cursor.value as T,
           });
-          cursor.continue();
-        } else {
-          settle(results);
+          // Check the limit AFTER push but BEFORE continuing —
+          // otherwise we'd fetch one extra record from storage
+          // only to discard it on the next onsuccess tick.
+          if (limit === undefined || results.length < limit) {
+            cursor.continue();
+            return;
+          }
         }
+        settle(results);
       };
       req.onerror = (event) => {
         if (!settled) {

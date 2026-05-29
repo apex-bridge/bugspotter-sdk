@@ -503,6 +503,64 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('onclose handler', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('clears cached refs when the browser fires onclose unexpectedly', async () => {
+      // Browsers fire IDBDatabase.onclose when the connection drops
+      // outside our control (storage pressure, user clearing site
+      // data, disk eviction). Without clearing this.db /
+      // this.dbPromise, the openDb cache returns a dead handle on
+      // every subsequent op. Next op should attempt a fresh open.
+      const fakeDb: {
+        objectStoreNames: { contains: () => boolean };
+        close: () => void;
+        onversionchange?: () => void;
+        onclose?: () => void;
+      } = {
+        objectStoreNames: { contains: () => true },
+        close: () => undefined,
+      };
+      const successReq: {
+        result: typeof fakeDb;
+        onsuccess?: () => void;
+      } = { result: fakeDb };
+      const fakeOpen = vi.fn(() => {
+        queueMicrotask(() => successReq.onsuccess?.());
+        return successReq;
+      });
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'onclose-test' });
+      // Drive one op to populate the cache. (readAll will fail
+      // against the bare fakeDb, but we only care about the cache.)
+      await storage.readAll(REPLAY_STORE).catch(() => undefined);
+      expect(fakeDb.onclose).toBeDefined();
+      const opCountBefore = fakeOpen.mock.calls.length;
+
+      // Simulate the browser firing onclose. Cache must be cleared.
+      fakeDb.onclose?.();
+
+      // Subsequent op should trigger a fresh open instead of
+      // returning the dead-handle cached promise.
+      await storage.readAll(REPLAY_STORE).catch(() => undefined);
+      expect(fakeOpen.mock.calls.length).toBeGreaterThan(opCountBefore);
+      storage.close();
+    });
+  });
+
   describe('versionchange handler', () => {
     const originalIndexedDB = globalThis.indexedDB;
 

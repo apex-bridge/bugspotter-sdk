@@ -76,6 +76,10 @@ export interface AsyncStorage {
 export class IndexedDbStorage implements AsyncStorage {
   private dbName: string;
   private dbPromise: Promise<IDBDatabase | null> | null = null;
+  // Synchronous handle on the resolved db so close() can close it
+  // without a microtask hop. Stays in sync with dbPromise: set on
+  // successful open, cleared on versionchange / close.
+  private db: IDBDatabase | null = null;
 
   constructor(options: AsyncStorageOptions = {}) {
     this.dbName = options.dbName ?? DB_NAME;
@@ -152,6 +156,9 @@ export class IndexedDbStorage implements AsyncStorage {
           if (this.dbPromise === promise) {
             this.dbPromise = null;
           }
+          if (this.db === db) {
+            this.db = null;
+          }
         };
         resolve(db);
       };
@@ -194,6 +201,12 @@ export class IndexedDbStorage implements AsyncStorage {
     if (!db && this.dbPromise === promise) {
       this.dbPromise = null;
     }
+    // Cache the resolved db handle synchronously so close() can
+    // close it without scheduling a .then. Only update if the open
+    // was successful and this is still the active promise.
+    if (db && this.dbPromise === promise) {
+      this.db = db;
+    }
     return db;
   }
 
@@ -231,12 +244,30 @@ export class IndexedDbStorage implements AsyncStorage {
         resolve([]);
         return;
       }
+      // Same shape as runTransaction: tx-level events (onabort,
+      // onerror) can fire without the request's own events
+      // (e.g. db handle revoked mid-tx, unusual browser
+      // termination). Without handling them, the Promise would
+      // hang forever.
+      let settled = false;
+      const settle = (result: T[]) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
       const req = tx.objectStore(store).getAll();
-      req.onsuccess = () => resolve((req.result ?? []) as T[]);
+      req.onsuccess = () => settle((req.result ?? []) as T[]);
       req.onerror = (event) => {
-        logger.warn(`IndexedDB readAll(${store}) request failed:`, req.error);
+        if (!settled) {
+          logger.warn(`IndexedDB readAll(${store}) request failed:`, req.error);
+        }
         event.preventDefault();
-        resolve([]);
+        settle([]);
+      };
+      tx.onabort = () => settle([]);
+      tx.onerror = (event) => {
+        event.preventDefault();
+        settle([]);
       };
     });
   }
@@ -250,10 +281,18 @@ export class IndexedDbStorage implements AsyncStorage {
   }
 
   close(): void {
-    if (!this.dbPromise) return;
-    void this.dbPromise.then((db) => {
-      db?.close();
-    });
+    // Synchronous close when the db is already open — eliminates
+    // the microtask gap during which user code could try another
+    // op against a "closing" connection. Falls back to the
+    // promise-based close only if open is still in flight.
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    } else if (this.dbPromise) {
+      void this.dbPromise.then((db) => {
+        db?.close();
+      });
+    }
     this.dbPromise = null;
   }
 

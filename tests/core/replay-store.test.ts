@@ -593,6 +593,120 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('close() synchronous semantics', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('closes the db synchronously when already opened (no microtask delay)', async () => {
+      // Previously close() always went through `dbPromise.then(db
+      // => db.close())`, introducing a microtask gap during which
+      // user code could try another op against a still-open
+      // connection. With this.db cached synchronously, close()
+      // can close immediately when the db is already resolved.
+      const closeFn = vi.fn();
+      const fakeDb = {
+        objectStoreNames: { contains: () => true },
+        close: closeFn,
+      };
+      const fakeReq: {
+        result: typeof fakeDb;
+        onsuccess?: () => void;
+      } = { result: fakeDb };
+      const fakeOpen = vi.fn(() => {
+        queueMicrotask(() => fakeReq.onsuccess?.());
+        return fakeReq;
+      });
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'sync-close' });
+      // Force the open to complete and the db to be cached.
+      await storage.readAll(REPLAY_STORE).catch(() => undefined);
+      expect(closeFn).not.toHaveBeenCalled();
+
+      // close() must fire db.close() immediately, BEFORE any
+      // awaited microtask runs.
+      storage.close();
+      expect(closeFn).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('readAll hang containment', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('resolves [] when the tx aborts without the request firing onerror', async () => {
+      // Defense-in-depth: per spec, an aborting tx should always
+      // error its pending requests. But weird browser termination
+      // (db handle revoked mid-tx, etc.) could leave the request
+      // hanging. Without tx-level handlers, readAll would never
+      // resolve.
+      const fakeStore = { getAll: () => ({}) as unknown as IDBRequest };
+      const txHandlers: { onabort: (() => void) | null } = { onabort: null };
+      const fakeTx = {
+        objectStore: () => fakeStore,
+        set oncomplete(_: () => void) {
+          // ignored
+        },
+        set onerror(_: (ev: { preventDefault: () => void }) => void) {
+          // ignored
+        },
+        set onabort(handler: () => void) {
+          txHandlers.onabort = handler;
+        },
+        error: null,
+        abort: () => undefined,
+      };
+      // The req we return from getAll has no onsuccess/onerror set
+      // by the test mock — so the only way the readAll Promise can
+      // resolve is via the tx-level handler we added.
+      const fakeDb = {
+        objectStoreNames: { contains: () => true },
+        close: () => undefined,
+        transaction: () => fakeTx,
+      };
+      const fakeReq: { result: typeof fakeDb; onsuccess?: () => void } = {
+        result: fakeDb,
+      };
+      const fakeOpen = vi.fn(() => {
+        queueMicrotask(() => fakeReq.onsuccess?.());
+        return fakeReq;
+      });
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'tx-hang' });
+      const readPromise = storage.readAll(REPLAY_STORE);
+      // Wait for the tx to be created — readAll yields at openDb.
+      await new Promise((r) => setTimeout(r, 0));
+      // Fire the tx-level abort. With the fix, readAll resolves
+      // to []. Without it, readAll hangs.
+      txHandlers.onabort?.();
+      await expect(readPromise).resolves.toEqual([]);
+      storage.close();
+    });
+  });
+
   describe('store schema drift safety', () => {
     it('soft-fails when reading from a non-existent store', async () => {
       // Schema only declares REPLAY_STORE + LOG_STORE. Asking for

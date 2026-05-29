@@ -130,6 +130,23 @@ describe('IndexedDbStorage', () => {
       const all = await storage.readAll<{ i: number }>(REPLAY_STORE);
       expect(all).toHaveLength(3);
     });
+
+    it('returns [] for limit=0 (no off-by-one record leak)', async () => {
+      // Realistic call site: a caller computing
+      // `Math.max(0, capacity - loaded)` hitting the boundary.
+      // Without the entry-point short-circuit, the cursor's first
+      // onsuccess would push one record BEFORE the in-loop check
+      // could veto it.
+      await storage.appendBatch(REPLAY_STORE, [{ i: 1 }, { i: 2 }, { i: 3 }]);
+      const result = await storage.readAll<{ i: number }>(REPLAY_STORE, 0);
+      expect(result).toEqual([]);
+    });
+
+    it('returns [] for negative limit', async () => {
+      await storage.appendBatch(REPLAY_STORE, [{ i: 1 }, { i: 2 }]);
+      const result = await storage.readAll<{ i: number }>(REPLAY_STORE, -5);
+      expect(result).toEqual([]);
+    });
   });
 
   describe('deleteUpTo', () => {

@@ -278,6 +278,13 @@ export class IndexedDbStorage implements AsyncStorage {
     store: StorageStore,
     limit?: number
   ): Promise<ReadResult<T>[]> {
+    // Short-circuit for limit <= 0 (e.g. a caller computing
+    // `Math.max(0, capacity - loaded)` and hitting the boundary).
+    // Without this, the cursor's first onsuccess would push one
+    // record BEFORE the in-loop limit check could veto it.
+    if (limit !== undefined && limit <= 0) {
+      return [];
+    }
     const db = await this.openDb();
     if (!db) return [];
     return new Promise<ReadResult<T>[]>((resolve) => {

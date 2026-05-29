@@ -69,6 +69,16 @@ export default [
         DocumentFragment: 'readonly',
         performance: 'readonly',
         atob: 'readonly',
+        // IndexedDB (used by src/core/storage/replay-store.ts)
+        indexedDB: 'readonly',
+        IDBDatabase: 'readonly',
+        IDBObjectStore: 'readonly',
+        IDBTransaction: 'readonly',
+        IDBTransactionMode: 'readonly',
+        IDBOpenDBRequest: 'readonly',
+        IDBRequest: 'readonly',
+        IDBKeyRange: 'readonly',
+        queueMicrotask: 'readonly',
       },
     },
     plugins: {
@@ -76,7 +86,10 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',

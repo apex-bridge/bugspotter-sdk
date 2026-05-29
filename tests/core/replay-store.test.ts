@@ -36,12 +36,14 @@ describe('IndexedDbStorage', () => {
   });
 
   describe('append + readAll', () => {
-    it('round-trips a single record', async () => {
+    it('round-trips a single record with its key', async () => {
       await storage.append(REPLAY_STORE, { ts: 1, type: 'click' });
       const all = await storage.readAll<{ ts: number; type: string }>(
         REPLAY_STORE
       );
-      expect(all).toEqual([{ ts: 1, type: 'click' }]);
+      expect(all).toHaveLength(1);
+      expect(all[0].value).toEqual({ ts: 1, type: 'click' });
+      expect(typeof all[0].key).toBe('number');
     });
 
     it('returns records in FIFO order', async () => {
@@ -49,14 +51,19 @@ describe('IndexedDbStorage', () => {
       await storage.append(REPLAY_STORE, { ts: 2 });
       await storage.append(REPLAY_STORE, { ts: 3 });
       const all = await storage.readAll<{ ts: number }>(REPLAY_STORE);
-      expect(all.map((r) => r.ts)).toEqual([1, 2, 3]);
+      expect(all.map((r) => r.value.ts)).toEqual([1, 2, 3]);
+      // Keys should also be monotonically increasing.
+      expect(all[0].key).toBeLessThan(all[1].key);
+      expect(all[1].key).toBeLessThan(all[2].key);
     });
 
     it('isolates writes by store', async () => {
       await storage.append(REPLAY_STORE, { kind: 'replay' });
       await storage.append(LOG_STORE, { kind: 'log' });
-      expect(await storage.readAll(REPLAY_STORE)).toEqual([{ kind: 'replay' }]);
-      expect(await storage.readAll(LOG_STORE)).toEqual([{ kind: 'log' }]);
+      const replays = await storage.readAll(REPLAY_STORE);
+      const logs = await storage.readAll(LOG_STORE);
+      expect(replays.map((r) => r.value)).toEqual([{ kind: 'replay' }]);
+      expect(logs.map((r) => r.value)).toEqual([{ kind: 'log' }]);
     });
   });
 
@@ -66,8 +73,8 @@ describe('IndexedDbStorage', () => {
       await storage.appendBatch(REPLAY_STORE, batch);
       const all = await storage.readAll<{ ts: number }>(REPLAY_STORE);
       expect(all).toHaveLength(50);
-      expect(all[0].ts).toBe(0);
-      expect(all[49].ts).toBe(49);
+      expect(all[0].value.ts).toBe(0);
+      expect(all[49].value.ts).toBe(49);
     });
 
     it('is a no-op for an empty batch', async () => {
@@ -88,7 +95,38 @@ describe('IndexedDbStorage', () => {
       await storage.append(LOG_STORE, { kind: 'log' });
       await storage.clear(REPLAY_STORE);
       expect(await storage.readAll(REPLAY_STORE)).toEqual([]);
-      expect(await storage.readAll(LOG_STORE)).toEqual([{ kind: 'log' }]);
+      const logs = await storage.readAll(LOG_STORE);
+      expect(logs.map((r) => r.value)).toEqual([{ kind: 'log' }]);
+    });
+  });
+
+  describe('deleteUpTo', () => {
+    it('deletes records with key ≤ maxKey and preserves later ones', async () => {
+      // Real race-safety win — pin the contract: records appended
+      // AFTER the readAll that produced maxKey survive.
+      await storage.appendBatch(REPLAY_STORE, [{ i: 1 }, { i: 2 }, { i: 3 }]);
+      const before = await storage.readAll<{ i: number }>(REPLAY_STORE);
+      expect(before.map((r) => r.value.i)).toEqual([1, 2, 3]);
+
+      // Simulate a concurrent append: new event arrives between
+      // readAll and the cleanup.
+      await storage.append(REPLAY_STORE, { i: 4 });
+
+      // Delete up to what we read (NOT the new record's key).
+      const maxKey = before[before.length - 1].key;
+      await storage.deleteUpTo(REPLAY_STORE, maxKey);
+
+      const after = await storage.readAll<{ i: number }>(REPLAY_STORE);
+      // The concurrent append survives — that's the whole point.
+      expect(after.map((r) => r.value.i)).toEqual([4]);
+    });
+
+    it('is a no-op when no records match the range', async () => {
+      await storage.append(REPLAY_STORE, { x: 1 });
+      const before = await storage.readAll(REPLAY_STORE);
+      await storage.deleteUpTo(REPLAY_STORE, 0); // maxKey below any real key
+      const after = await storage.readAll(REPLAY_STORE);
+      expect(after).toHaveLength(before.length);
     });
   });
 
@@ -102,7 +140,7 @@ describe('IndexedDbStorage', () => {
 
       const reader = new IndexedDbStorage({ dbName });
       const all = await reader.readAll<{ event: string }>(REPLAY_STORE);
-      expect(all.map((r) => r.event)).toEqual(['one', 'two']);
+      expect(all.map((r) => r.value.event)).toEqual(['one', 'two']);
       reader.close();
     });
 
@@ -190,7 +228,7 @@ describe('IndexedDbStorage', () => {
       // Next op must attempt a fresh open and succeed.
       await store.append(REPLAY_STORE, { event: 'after-recovery' });
       const after = await store.readAll<{ event: string }>(REPLAY_STORE);
-      expect(after).toEqual([{ event: 'after-recovery' }]);
+      expect(after.map((r) => r.value)).toEqual([{ event: 'after-recovery' }]);
       store.close();
     });
   });
@@ -658,7 +696,9 @@ describe('IndexedDbStorage', () => {
       // (db handle revoked mid-tx, etc.) could leave the request
       // hanging. Without tx-level handlers, readAll would never
       // resolve.
-      const fakeStore = { getAll: () => ({}) as unknown as IDBRequest };
+      const fakeStore = {
+        openCursor: () => ({}) as unknown as IDBRequest,
+      };
       const txHandlers: { onabort: (() => void) | null } = { onabort: null };
       const fakeTx = {
         objectStore: () => fakeStore,
@@ -674,7 +714,7 @@ describe('IndexedDbStorage', () => {
         error: null,
         abort: () => undefined,
       };
-      // The req we return from getAll has no onsuccess/onerror set
+      // The req we return from openCursor has no onsuccess/onerror set
       // by the test mock — so the only way the readAll Promise can
       // resolve is via the tx-level handler we added.
       const fakeDb = {

@@ -77,6 +77,7 @@ export default [
         IDBTransactionMode: 'readonly',
         IDBOpenDBRequest: 'readonly',
         IDBRequest: 'readonly',
+        IDBKeyRange: 'readonly',
         queueMicrotask: 'readonly',
       },
     },

@@ -19,8 +19,6 @@ import { getLogger } from '../../utils/logger';
 
 const logger = getLogger();
 
-/** Default IndexedDB database name. */
-const DB_NAME = 'bugspotter';
 /** Default version — increment when migrating the schema. */
 const DB_VERSION = 1;
 
@@ -29,8 +27,15 @@ export const REPLAY_STORE = 'replay-events';
 export const LOG_STORE = 'logs';
 
 export interface AsyncStorageOptions {
-  /** Override the default database name. */
-  dbName?: string;
+  /**
+   * IndexedDB database name. Required — there is no sensible default
+   * because IDB databases are scoped per-origin, and a shared default
+   * would mix data across tenants in a multi-tenant SPA. Slice 2 (the
+   * capture wiring) should derive a name from a stable identifier
+   * (API key prefix, endpoint hash) so different SDK configs land in
+   * separate stores.
+   */
+  dbName: string;
 }
 
 /**
@@ -54,13 +59,31 @@ export type StorageStore =
  * logged at warn level. The SDK's capture flow must never break
  * because storage broke.
  */
+/**
+ * Read result that exposes the auto-increment key alongside the
+ * value. Slice 2 will use the key to call `deleteUpTo` rather than
+ * `clear()` — that lets concurrent appends (e.g. a late rrweb event
+ * arriving while we're flushing) survive the cleanup. Without keys,
+ * a wholesale `clear()` after a successful flush would race-delete
+ * anything appended between `readAll` and `clear`.
+ */
+export interface ReadResult<T> {
+  key: number;
+  value: T;
+}
+
 export interface AsyncStorage {
   /** Append a single record. */
   append<T>(store: StorageStore, value: T): Promise<void>;
   /** Append many records in a single transaction. */
   appendBatch<T>(store: StorageStore, values: T[]): Promise<void>;
-  /** Read all records, FIFO. */
-  readAll<T>(store: StorageStore): Promise<T[]>;
+  /** Read all records with their auto-increment keys, FIFO. */
+  readAll<T>(store: StorageStore): Promise<ReadResult<T>[]>;
+  /**
+   * Delete every record whose key is ≤ maxKey. The race-safe
+   * alternative to `clear()` for read-then-delete flows.
+   */
+  deleteUpTo(store: StorageStore, maxKey: number): Promise<void>;
   /** Drop everything in the store. */
   clear(store: StorageStore): Promise<void>;
   /** Close any underlying connection. */
@@ -81,8 +104,8 @@ export class IndexedDbStorage implements AsyncStorage {
   // successful open, cleared on versionchange / close.
   private db: IDBDatabase | null = null;
 
-  constructor(options: AsyncStorageOptions = {}) {
-    this.dbName = options.dbName ?? DB_NAME;
+  constructor(options: AsyncStorageOptions) {
+    this.dbName = options.dbName;
   }
 
   private async openDb(): Promise<IDBDatabase | null> {
@@ -210,7 +233,7 @@ export class IndexedDbStorage implements AsyncStorage {
     return db;
   }
 
-  async append<T>(store: string, value: T): Promise<void> {
+  async append<T>(store: StorageStore, value: T): Promise<void> {
     const db = await this.openDb();
     if (!db) return;
     await this.runTransaction(db, store, 'readwrite', (objectStore) => {
@@ -218,7 +241,7 @@ export class IndexedDbStorage implements AsyncStorage {
     });
   }
 
-  async appendBatch<T>(store: string, values: T[]): Promise<void> {
+  async appendBatch<T>(store: StorageStore, values: T[]): Promise<void> {
     if (values.length === 0) return;
     const db = await this.openDb();
     if (!db) return;
@@ -229,10 +252,10 @@ export class IndexedDbStorage implements AsyncStorage {
     });
   }
 
-  async readAll<T>(store: string): Promise<T[]> {
+  async readAll<T>(store: StorageStore): Promise<ReadResult<T>[]> {
     const db = await this.openDb();
     if (!db) return [];
-    return new Promise<T[]>((resolve) => {
+    return new Promise<ReadResult<T>[]>((resolve) => {
       let tx: IDBTransaction;
       try {
         tx = db.transaction(store, 'readonly');
@@ -250,13 +273,28 @@ export class IndexedDbStorage implements AsyncStorage {
       // termination). Without handling them, the Promise would
       // hang forever.
       let settled = false;
-      const settle = (result: T[]) => {
+      const settle = (result: ReadResult<T>[]) => {
         if (settled) return;
         settled = true;
         resolve(result);
       };
-      const req = tx.objectStore(store).getAll();
-      req.onsuccess = () => settle((req.result ?? []) as T[]);
+      // openCursor() instead of getAll() so we can capture the
+      // auto-increment key alongside each value. The key is what
+      // deleteUpTo will scope the range to.
+      const results: ReadResult<T>[] = [];
+      const req = tx.objectStore(store).openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          results.push({
+            key: cursor.key as number,
+            value: cursor.value as T,
+          });
+          cursor.continue();
+        } else {
+          settle(results);
+        }
+      };
       req.onerror = (event) => {
         if (!settled) {
           logger.warn(`IndexedDB readAll(${store}) request failed:`, req.error);
@@ -272,7 +310,18 @@ export class IndexedDbStorage implements AsyncStorage {
     });
   }
 
-  async clear(store: string): Promise<void> {
+  async deleteUpTo(store: StorageStore, maxKey: number): Promise<void> {
+    const db = await this.openDb();
+    if (!db) return;
+    await this.runTransaction(db, store, 'readwrite', (objectStore) => {
+      // Inclusive upper bound — delete every record whose key is
+      // ≤ maxKey. Records appended AFTER the readAll that produced
+      // maxKey survive (their auto-increment keys are > maxKey).
+      objectStore.delete(IDBKeyRange.upperBound(maxKey));
+    });
+  }
+
+  async clear(store: StorageStore): Promise<void> {
     const db = await this.openDb();
     if (!db) return;
     await this.runTransaction(db, store, 'readwrite', (objectStore) => {

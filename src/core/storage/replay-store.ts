@@ -77,8 +77,17 @@ export interface AsyncStorage {
   append<T>(store: StorageStore, value: T): Promise<void>;
   /** Append many records in a single transaction. */
   appendBatch<T>(store: StorageStore, values: T[]): Promise<void>;
-  /** Read all records with their auto-increment keys, FIFO. */
-  readAll<T>(store: StorageStore): Promise<ReadResult<T>[]>;
+  /**
+   * Read records with their auto-increment keys, FIFO. Optional
+   * `limit` caps the number returned — defense against unbounded
+   * memory use when storage has accumulated (e.g. a long-lived SPA
+   * where pagehide flushed many sessions but no init ever ran to
+   * drain them). FIFO order means a limited read returns the
+   * OLDEST N records, which is the right shape for a GC-and-drop
+   * flow but NOT for "show me the latest session" — that's a
+   * consumer-side concern.
+   */
+  readAll<T>(store: StorageStore, limit?: number): Promise<ReadResult<T>[]>;
   /**
    * Delete every record whose key is ≤ maxKey. The race-safe
    * alternative to `clear()` for read-then-delete flows.
@@ -252,7 +261,10 @@ export class IndexedDbStorage implements AsyncStorage {
     });
   }
 
-  async readAll<T>(store: StorageStore): Promise<ReadResult<T>[]> {
+  async readAll<T>(
+    store: StorageStore,
+    limit?: number
+  ): Promise<ReadResult<T>[]> {
     const db = await this.openDb();
     if (!db) return [];
     return new Promise<ReadResult<T>[]>((resolve) => {
@@ -285,7 +297,7 @@ export class IndexedDbStorage implements AsyncStorage {
       const req = tx.objectStore(store).openCursor();
       req.onsuccess = () => {
         const cursor = req.result;
-        if (cursor) {
+        if (cursor && (limit === undefined || results.length < limit)) {
           results.push({
             key: cursor.key as number,
             value: cursor.value as T,

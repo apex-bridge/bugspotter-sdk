@@ -100,6 +100,38 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('readAll limit', () => {
+    it('caps the result at `limit` and returns the OLDEST records (FIFO)', async () => {
+      // Defense against unbounded memory use when storage has
+      // accumulated across many sessions. FIFO order means a
+      // limited read drains the oldest first — fits the gc-and-
+      // delete-up-to pattern slice 2 will use.
+      await storage.appendBatch(REPLAY_STORE, [
+        { i: 1 },
+        { i: 2 },
+        { i: 3 },
+        { i: 4 },
+        { i: 5 },
+      ]);
+      const limited = await storage.readAll<{ i: number }>(REPLAY_STORE, 2);
+      expect(limited).toHaveLength(2);
+      // Oldest two, not newest.
+      expect(limited.map((r) => r.value.i)).toEqual([1, 2]);
+    });
+
+    it('returns all records when limit exceeds count', async () => {
+      await storage.appendBatch(REPLAY_STORE, [{ i: 1 }, { i: 2 }]);
+      const all = await storage.readAll<{ i: number }>(REPLAY_STORE, 100);
+      expect(all).toHaveLength(2);
+    });
+
+    it('treats undefined limit as unlimited', async () => {
+      await storage.appendBatch(REPLAY_STORE, [{ i: 1 }, { i: 2 }, { i: 3 }]);
+      const all = await storage.readAll<{ i: number }>(REPLAY_STORE);
+      expect(all).toHaveLength(3);
+    });
+  });
+
   describe('deleteUpTo', () => {
     it('deletes records with key ≤ maxKey and preserves later ones', async () => {
       // Real race-safety win — pin the contract: records appended

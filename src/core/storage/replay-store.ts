@@ -34,6 +34,17 @@ export interface AsyncStorageOptions {
 }
 
 /**
+ * `(string & {})` keeps the literal types visible to IDE tooling so
+ * REPLAY_STORE / LOG_STORE auto-complete, while still accepting any
+ * string at runtime (we want soft-fail behavior on schema drift,
+ * not a hard reject).
+ */
+export type StorageStore =
+  | typeof REPLAY_STORE
+  | typeof LOG_STORE
+  | (string & {});
+
+/**
  * Append-only stream of objects, keyed by an autoincrement integer.
  * Reads are FIFO. Each entry is a single record (e.g., one rrweb
  * event or one batched chunk — caller's choice).
@@ -45,13 +56,13 @@ export interface AsyncStorageOptions {
  */
 export interface AsyncStorage {
   /** Append a single record. */
-  append<T>(store: string, value: T): Promise<void>;
+  append<T>(store: StorageStore, value: T): Promise<void>;
   /** Append many records in a single transaction. */
-  appendBatch<T>(store: string, values: T[]): Promise<void>;
+  appendBatch<T>(store: StorageStore, values: T[]): Promise<void>;
   /** Read all records, FIFO. */
-  readAll<T>(store: string): Promise<T[]>;
+  readAll<T>(store: StorageStore): Promise<T[]>;
   /** Drop everything in the store. */
-  clear(store: string): Promise<void>;
+  clear(store: StorageStore): Promise<void>;
   /** Close any underlying connection. */
   close(): void;
 }
@@ -299,12 +310,14 @@ export class IndexedDbStorage implements AsyncStorage {
         } catch {
           // Already aborted / finished — fine.
         }
-        // Resolve unconditionally. If tx.abort threw AND neither
-        // onabort nor onerror subsequently fires, the Promise
-        // would otherwise hang forever and hang the capture flow.
-        // Promise resolve is idempotent — a later onabort call is
-        // a no-op.
-        resolve();
+        // settle() (not resolve()) so the `settled` flag is set
+        // immediately. tx.abort() above triggers tx.onabort
+        // asynchronously — without the flag set, that handler
+        // would log a duplicate "tx aborted" warning. The
+        // unconditional call also guards against tx.abort() itself
+        // throwing AND no onabort/onerror subsequently firing,
+        // which would otherwise hang the capture flow.
+        settle();
       }
     });
   }

@@ -493,6 +493,106 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('work-throws path log dedup', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('does not log "tx aborted" after a sync work throw + tx.abort()', async () => {
+      // When work() throws synchronously, our catch logs "work
+      // threw" and calls tx.abort(). The abort fires tx.onabort
+      // asynchronously — without settle() in the catch (just
+      // resolve()), the onabort handler doesn't see the settled
+      // flag and logs a duplicate "tx aborted" warning. settle()
+      // sets the flag immediately, suppressing the redundant log.
+      //
+      // The existing `appendBatch` dedup test exercises the tx
+      // .onerror path (structured-clone failure surfaces as a
+      // request error). This one exercises the sync-throw path
+      // via a targeted mock whose objectStore.add throws.
+      const fakeObjectStore = {
+        add: () => {
+          throw new Error('sync work throw');
+        },
+        clear: () => undefined,
+      };
+      let onabortHandler: (() => void) | null = null;
+      const fakeTx = {
+        objectStore: () => fakeObjectStore,
+        abort: () => {
+          // The browser fires onabort asynchronously after abort();
+          // simulate by queuing a microtask.
+          queueMicrotask(() => onabortHandler?.());
+        },
+        get oncomplete(): null {
+          return null;
+        },
+        set oncomplete(_) {
+          // ignored
+        },
+        get onerror(): null {
+          return null;
+        },
+        set onerror(_) {
+          // ignored
+        },
+        set onabort(handler: () => void) {
+          onabortHandler = handler;
+        },
+        error: null,
+      };
+      const fakeDb = {
+        transaction: () => fakeTx,
+        close: () => undefined,
+        objectStoreNames: { contains: () => true },
+      };
+      const fakeReq: { result: unknown; onsuccess?: () => void } = {
+        result: fakeDb,
+      };
+      const fakeOpen = vi.fn(() => {
+        queueMicrotask(() => fakeReq.onsuccess?.());
+        return fakeReq;
+      });
+
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const warnSpy = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        const storage = new IndexedDbStorage({ dbName: 'sync-throw-dedup' });
+        await storage.append(REPLAY_STORE, { x: 1 });
+
+        // The work-throws catch should log "work threw" exactly
+        // once, NOT also "tx aborted" from the subsequent
+        // onabort handler.
+        const workThrewWarns = warnSpy.mock.calls.filter((call) => {
+          const first = call[0];
+          return typeof first === 'string' && first.includes('work threw');
+        });
+        const abortedWarns = warnSpy.mock.calls.filter((call) => {
+          const first = call[0];
+          return typeof first === 'string' && first.includes('aborted:');
+        });
+        expect(workThrewWarns.length).toBe(1);
+        expect(abortedWarns.length).toBe(0);
+        storage.close();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  });
+
   describe('store schema drift safety', () => {
     it('soft-fails when reading from a non-existent store', async () => {
       // Schema only declares REPLAY_STORE + LOG_STORE. Asking for

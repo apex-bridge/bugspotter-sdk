@@ -277,6 +277,10 @@ export class DOMCollector {
   destroy(): void {
     this.stopRecording();
     this.clearBuffer();
+    // Null the emitQueue so any in-flight restore's finally fails
+    // its `this.emitQueue === currentQueue` identity check and
+    // doesn't repopulate the just-cleared buffer.
+    this.emitQueue = null;
     if (this.persistence) {
       // Flush the (now-empty after clearBuffer) buffer is a no-op,
       // so we don't bother. We DO unbind the pagehide listener so

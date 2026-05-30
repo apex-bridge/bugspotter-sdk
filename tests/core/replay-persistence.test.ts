@@ -201,6 +201,85 @@ describe('ReplayPersistence', () => {
     });
   });
 
+  describe('bfcache handling', () => {
+    it('clears storage on pageshow.persisted (memory buffer is authoritative)', async () => {
+      // bfcache scenario: pagehide flushed events to IDB while the
+      // page went into the back-forward cache. Then the user
+      // navigated back — pageshow fires with persisted=true, and
+      // the memory buffer is still intact. The IDB copy is now
+      // obsolete; clearing it prevents duplicates the next time
+      // pagehide flushes the (still-intact) memory buffer.
+      const dbName = uniqueDbName();
+      const persistence = new ReplayPersistence({ dbName });
+      const buffer = new TestBuffer();
+      buffer.events = [makeEvent(100), makeEvent(200)];
+      persistence.bind(buffer);
+
+      // Simulate pagehide-to-bfcache (flush happens).
+      window.dispatchEvent(new Event('pagehide'));
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Confirm flush landed.
+      let probe = new IndexedDbStorage({ dbName });
+      expect(await probe.readAll(REPLAY_STORE)).toHaveLength(2);
+      probe.close();
+
+      // Now dispatch pageshow with persisted=true (bfcache restore).
+      const pageshowEvent = new Event('pageshow') as Event & {
+        persisted: boolean;
+      };
+      Object.defineProperty(pageshowEvent, 'persisted', { value: true });
+      window.dispatchEvent(pageshowEvent);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // IDB should be empty.
+      probe = new IndexedDbStorage({ dbName });
+      expect(await probe.readAll(REPLAY_STORE)).toHaveLength(0);
+      probe.close();
+
+      persistence.destroy();
+    });
+
+    it('does NOT clear storage on a normal pageshow (persisted=false)', async () => {
+      // Normal page load (not from bfcache): pageshow fires with
+      // persisted=false. We should NOT touch IDB — this is the
+      // path where restore is supposed to read prior events.
+      const dbName = uniqueDbName();
+      const seedStorage = new IndexedDbStorage({ dbName });
+      await seedStorage.appendBatch(REPLAY_STORE, [makeEvent(1), makeEvent(2)]);
+      seedStorage.close();
+
+      const persistence = new ReplayPersistence({ dbName });
+      persistence.bind(new TestBuffer());
+
+      const pageshowEvent = new Event('pageshow') as Event & {
+        persisted: boolean;
+      };
+      Object.defineProperty(pageshowEvent, 'persisted', { value: false });
+      window.dispatchEvent(pageshowEvent);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Seeded events still there.
+      const probe = new IndexedDbStorage({ dbName });
+      expect(await probe.readAll(REPLAY_STORE)).toHaveLength(2);
+      probe.close();
+      persistence.destroy();
+    });
+
+    it('destroy removes the pageshow listener', () => {
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+      removeSpy.mockClear();
+      const persistence = new ReplayPersistence({ dbName: uniqueDbName() });
+      persistence.bind(new TestBuffer());
+      persistence.destroy();
+      const pageshowRemoves = removeSpy.mock.calls.filter(
+        (c) => c[0] === 'pageshow'
+      );
+      expect(pageshowRemoves.length).toBe(1);
+      removeSpy.mockRestore();
+    });
+  });
+
   describe('pagehide listener', () => {
     it('binds exactly once even across multiple bind() calls', () => {
       const addSpy = vi.spyOn(window, 'addEventListener');

@@ -90,7 +90,7 @@ export class CaptureManager {
       // rejects empty names and a default would mix tenants on a
       // shared origin. Better to log + skip than misfire silently.
       if (config.replay?.persistAcrossNavigation) {
-        const dbName = config.replay?.dbName;
+        const dbName = this.deriveTabScopedDbName(config.replay?.dbName);
         if (dbName) {
           try {
             this.replayPersistence = new ReplayPersistence({ dbName });
@@ -127,6 +127,41 @@ export class CaptureManager {
         persistence: this.replayPersistence,
       });
       this.domCollector.startRecording();
+    }
+  }
+
+  /**
+   * Postfix the host-supplied dbName with a per-tab id so two tabs
+   * of the same SPA don't share the IDB store. Without this, Tab A's
+   * pagehide flush ends up in Tab B's restore, with both tabs racing
+   * to drain the same shared store on init — yielding interleaved
+   * timelines and one tab's restore silently destroying another's
+   * data.
+   *
+   * sessionStorage is the natural fit: per-tab AND survives reload
+   * within that tab (so restore-after-reload still finds the prior
+   * session's events). Returns undefined when sessionStorage is
+   * unavailable (SSR, private browsing with storage blocked) — the
+   * caller's missing-dbName warning path handles that.
+   */
+  private deriveTabScopedDbName(base: string | undefined): string | undefined {
+    if (!base) return undefined;
+    if (typeof window === 'undefined' || !window.sessionStorage) {
+      return base;
+    }
+    try {
+      const KEY = '__bugspotter_tab_id__';
+      let tabId = window.sessionStorage.getItem(KEY);
+      if (!tabId) {
+        tabId = Math.random().toString(36).slice(2, 10);
+        window.sessionStorage.setItem(KEY, tabId);
+      }
+      return `${base}-${tabId}`;
+    } catch {
+      // sessionStorage access threw (cookies/storage blocked).
+      // Fall back to the bare dbName — tabs WILL share, but the
+      // alternative is no persistence at all.
+      return base;
     }
   }
 

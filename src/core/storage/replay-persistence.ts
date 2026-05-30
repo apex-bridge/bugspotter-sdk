@@ -69,8 +69,9 @@ export interface PersistableBuffer {
 export class ReplayPersistence {
   private storage: AsyncStorage;
   private pagehideHandler: ((event: PageTransitionEvent) => void) | null = null;
+  private pageshowHandler: ((event: PageTransitionEvent) => void) | null = null;
   private boundBuffer: PersistableBuffer | null = null;
-  // Tracks whether we've ever attached the pagehide listener.
+  // Tracks whether we've ever attached the lifecycle listeners.
   // We bind once per instance — repeated `bind` calls are no-ops.
   private listenerAttached = false;
 
@@ -101,11 +102,28 @@ export class ReplayPersistence {
       // persistence is best-effort).
       void this.flush();
     };
+    // bfcache handling: when a page enters the back-forward cache,
+    // its in-memory state (including the rrweb buffer) is preserved.
+    // pagehide fires anyway, so we wrote the events to IDB. On
+    // return, pageshow fires with event.persisted === true and the
+    // memory buffer is still authoritative — meaning the IDB copy
+    // is now obsolete. Clearing it prevents duplicates on the
+    // NEXT real pagehide (which would otherwise re-append the same
+    // events the memory buffer already holds).
+    this.pageshowHandler = (event: PageTransitionEvent) => {
+      if (!event.persisted) {
+        return;
+      }
+      void this.storage.clear(REPLAY_STORE).catch((err) => {
+        logger.warn('ReplayPersistence: bfcache clear failed:', err);
+      });
+    };
     try {
       window.addEventListener('pagehide', this.pagehideHandler);
+      window.addEventListener('pageshow', this.pageshowHandler);
       this.listenerAttached = true;
     } catch (err) {
-      logger.warn('ReplayPersistence: pagehide bind failed:', err);
+      logger.warn('ReplayPersistence: lifecycle bind failed:', err);
     }
   }
 
@@ -180,18 +198,20 @@ export class ReplayPersistence {
    * Safe to call multiple times.
    */
   destroy(): void {
-    if (
-      this.pagehideHandler &&
-      typeof window !== 'undefined' &&
-      window.removeEventListener
-    ) {
+    if (typeof window !== 'undefined' && window.removeEventListener) {
       try {
-        window.removeEventListener('pagehide', this.pagehideHandler);
+        if (this.pagehideHandler) {
+          window.removeEventListener('pagehide', this.pagehideHandler);
+        }
+        if (this.pageshowHandler) {
+          window.removeEventListener('pageshow', this.pageshowHandler);
+        }
       } catch (err) {
-        logger.warn('ReplayPersistence: pagehide unbind failed:', err);
+        logger.warn('ReplayPersistence: lifecycle unbind failed:', err);
       }
     }
     this.pagehideHandler = null;
+    this.pageshowHandler = null;
     this.listenerAttached = false;
     this.boundBuffer = null;
     this.storage.close();

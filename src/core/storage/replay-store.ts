@@ -140,119 +140,142 @@ export class IndexedDbStorage implements AsyncStorage {
         resolve(null);
         return;
       }
-      // Flipped on the abandonment paths (blocked / error). If
-      // the browser later resolves the request anyway (e.g. the
-      // blocking older connection closes), we close the late-
-      // arriving db handle so it doesn't leak open and block
-      // future upgrades.
-      let abandoned = false;
-      request.onupgradeneeded = () => {
-        // createObjectStore can throw on storage exhaustion or
-        // schema corruption. The spec's auto-abort on uncaught
-        // exception fires our onerror (with preventDefault), but
-        // window.onerror typically fires BEFORE the request's
-        // error event and isn't suppressed by it — host monitoring
-        // (Sentry, Datadog) would still pick up the throw. Wrap +
-        // explicit abort keeps the failure off the global surface.
-        try {
-          const db = request.result;
-          if (!db.objectStoreNames.contains(REPLAY_STORE)) {
-            db.createObjectStore(REPLAY_STORE, { autoIncrement: true });
-          }
-          if (!db.objectStoreNames.contains(LOG_STORE)) {
-            db.createObjectStore(LOG_STORE, { autoIncrement: true });
-          }
-        } catch (err) {
-          logger.warn('IndexedDB upgrade failed, aborting:', err);
-          try {
-            request.transaction?.abort();
-          } catch {
-            // Already aborted / inactive — fine.
-          }
-        }
-      };
-      request.onsuccess = () => {
-        if (abandoned) {
-          request.result.close();
-          return;
-        }
-        const db = request.result;
-        // Another tab opening the DB at a higher version triggers
-        // versionchange on every existing connection. If we don't
-        // close ours, the other tab's upgrade hangs (onblocked
-        // forever). Voluntarily closing lets the new version win;
-        // we null dbPromise so the next op on THIS instance opens
-        // fresh against the new schema.
-        db.onversionchange = () => {
-          db.close();
-          if (this.dbPromise === promise) {
-            this.dbPromise = null;
-          }
-          if (this.db === db) {
-            this.db = null;
-          }
-        };
-        // onclose fires when the browser unexpectedly closes the
-        // connection — storage pressure, user clearing site data,
-        // disk eviction. Without clearing the cache, subsequent
-        // ops would soft-fail forever against the dead handle
-        // because openDb returns the still-cached promise.
-        db.onclose = () => {
-          if (this.dbPromise === promise) {
-            this.dbPromise = null;
-          }
-          if (this.db === db) {
-            this.db = null;
-          }
-        };
-        resolve(db);
-      };
-      // preventDefault on error events stops the uncaught-IDB-error
-      // console output that host-app monitoring (Sentry, Datadog)
-      // often picks up via console interception.
-      request.onerror = (event) => {
-        logger.warn('IndexedDB open failed, soft-failing:', request.error);
-        event.preventDefault();
-        abandoned = true;
-        resolve(null);
-      };
-      request.onblocked = (event) => {
-        // Another tab holds an older version open. Don't hang the
-        // capture flow — soft-fail; the SDK will continue without
-        // persistence and try again on next page load or op. The
-        // request stays queued in the browser; if the older
-        // connection closes later, onsuccess will fire with a db
-        // handle that the abandoned flag tells us to close.
-        logger.warn('IndexedDB open blocked (other tab holds older version)');
-        event.preventDefault();
-        abandoned = true;
-        resolve(null);
-      };
+      // Pass a getter (not promise directly) — the executor runs
+      // synchronously, so `promise` is still in TDZ here. The
+      // getter is called later inside event handler callbacks,
+      // by which time `const promise =` has completed.
+      this.wireOpenRequestHandlers(request, () => promise, resolve);
     });
     this.dbPromise = promise;
 
     const db = await promise;
-    // Null the cached promise on failure so a long-lived SPA can
-    // retry on the next op once the blocking condition clears
-    // (other tab closed, polyfill loaded, etc.). Successful opens
-    // stay cached for the page's lifetime.
-    //
-    // Identity check: only null if dbPromise is STILL this
-    // promise. Two concurrent openDb calls that both await a
-    // failed promiseA might race — one finishes the cleanup,
-    // its caller retries and sets dbPromise = promiseB, then
-    // the second one finishes and would otherwise null promiseB
-    // out from under the retry.
+    this.cachePostSettle(promise, db);
+    return db;
+  }
+
+  /**
+   * Wires every event handler on the open request: schema upgrade,
+   * lifecycle hooks on the resolved db (versionchange + onclose),
+   * and soft-fail handlers for the failure paths (error + blocked).
+   * Closure-captured `abandoned` flag coordinates between
+   * onblocked/onerror and a possibly-arriving-later onsuccess.
+   */
+  private wireOpenRequestHandlers(
+    request: IDBOpenDBRequest,
+    getPromise: () => Promise<IDBDatabase | null>,
+    resolve: (db: IDBDatabase | null) => void
+  ): void {
+    // Flipped on the abandonment paths (blocked / error). If the
+    // browser later resolves the request anyway (e.g. the blocking
+    // older connection closes), we close the late-arriving db
+    // handle so it doesn't leak open and block future upgrades.
+    let abandoned = false;
+
+    request.onupgradeneeded = () => this.runSchemaUpgrade(request);
+    request.onsuccess = () => {
+      if (abandoned) {
+        request.result.close();
+        return;
+      }
+      const db = request.result;
+      this.wireDbLifecycleHooks(db, getPromise());
+      resolve(db);
+    };
+    // preventDefault on error events stops the uncaught-IDB-error
+    // console output that host-app monitoring (Sentry, Datadog)
+    // often picks up via console interception.
+    request.onerror = (event) => {
+      logger.warn('IndexedDB open failed, soft-failing:', request.error);
+      event.preventDefault();
+      abandoned = true;
+      resolve(null);
+    };
+    request.onblocked = (event) => {
+      // Another tab holds an older version open. Don't hang the
+      // capture flow — soft-fail; the SDK will continue without
+      // persistence and try again on next page load or op. The
+      // request stays queued in the browser; if the older
+      // connection closes later, onsuccess will fire with a db
+      // handle that the abandoned flag tells us to close.
+      logger.warn('IndexedDB open blocked (other tab holds older version)');
+      event.preventDefault();
+      abandoned = true;
+      resolve(null);
+    };
+  }
+
+  /**
+   * Schema setup during onupgradeneeded. createObjectStore can
+   * throw on storage exhaustion or schema corruption. The spec's
+   * auto-abort on uncaught exception fires our onerror (with
+   * preventDefault), but window.onerror typically fires BEFORE
+   * the request's error event and isn't suppressed by it — host
+   * monitoring would still pick up the throw. Wrap + explicit
+   * abort keeps the failure off the global surface.
+   */
+  private runSchemaUpgrade(request: IDBOpenDBRequest): void {
+    try {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(REPLAY_STORE)) {
+        db.createObjectStore(REPLAY_STORE, { autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains(LOG_STORE)) {
+        db.createObjectStore(LOG_STORE, { autoIncrement: true });
+      }
+    } catch (err) {
+      logger.warn('IndexedDB upgrade failed, aborting:', err);
+      try {
+        request.transaction?.abort();
+      } catch {
+        // Already aborted / inactive — fine.
+      }
+    }
+  }
+
+  /**
+   * Wires the two unsolicited-close events on a resolved db:
+   * versionchange (another tab is upgrading; we yield voluntarily)
+   * and onclose (browser-driven eviction — storage pressure, user
+   * clearing site data). Both clear the cache so the next op opens
+   * fresh; both gate the clear on identity so a stale event from a
+   * superseded connection can't clobber a newer cached one.
+   */
+  private wireDbLifecycleHooks(
+    db: IDBDatabase,
+    promise: Promise<IDBDatabase | null>
+  ): void {
+    const clearCacheIfMatch = (): void => {
+      if (this.dbPromise === promise) {
+        this.dbPromise = null;
+      }
+      if (this.db === db) {
+        this.db = null;
+      }
+    };
+    db.onversionchange = () => {
+      db.close();
+      clearCacheIfMatch();
+    };
+    db.onclose = clearCacheIfMatch;
+  }
+
+  /**
+   * After `await promise` settles, update the synchronous cache
+   * fields. Both branches gate on identity — two concurrent openDb
+   * calls awaiting the same failed promiseA could otherwise race
+   * each other's cleanup, with a stale cleanup clobbering a fresh
+   * in-flight promiseB.
+   */
+  private cachePostSettle(
+    promise: Promise<IDBDatabase | null>,
+    db: IDBDatabase | null
+  ): void {
     if (!db && this.dbPromise === promise) {
       this.dbPromise = null;
     }
-    // Cache the resolved db handle synchronously so close() can
-    // close it without scheduling a .then. Only update if the open
-    // was successful and this is still the active promise.
     if (db && this.dbPromise === promise) {
       this.db = db;
     }
-    return db;
   }
 
   async append<T>(store: StorageStore, value: T): Promise<void> {

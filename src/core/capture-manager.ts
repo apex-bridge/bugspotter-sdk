@@ -11,8 +11,11 @@ import { MetadataCapture } from '../capture/metadata';
 import { DOMCollector } from '../collectors/dom';
 import { ReplayPersistence } from './storage/replay-persistence';
 import type { Sanitizer } from '../utils/sanitize';
+import { getLogger } from '../utils/logger';
 
 import { DEFAULT_REPLAY_DURATION_SECONDS } from '../constants';
+
+const logger = getLogger();
 
 /**
  * Configuration for capture manager
@@ -99,16 +102,14 @@ export class CaptureManager {
             // ever does — replay capture proceeds without
             // persistence.
             this.replayPersistence = undefined;
-            // eslint-disable-next-line no-console
-            console.warn('[BugSpotter] Replay persistence init failed:', err);
+            logger.warn('Replay persistence init failed:', err);
           }
         } else {
           // The host opted in but didn't provide dbName. Surface
           // this loudly — otherwise they'd assume replay persists
           // across navigations and silently get nothing.
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[BugSpotter] persistAcrossNavigation enabled but dbName not set; cross-navigation replay will not persist'
+          logger.warn(
+            'persistAcrossNavigation enabled but dbName not set; cross-navigation replay will not persist'
           );
         }
       }

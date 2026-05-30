@@ -20,6 +20,7 @@ import {
   IndexedDbStorage,
   REPLAY_STORE,
 } from '../../src/core/storage/replay-store';
+import type { AsyncStorage } from '../../src/core/storage/replay-store';
 import type { PersistableBuffer } from '../../src/core/storage/replay-persistence';
 
 let dbCounter = 0;
@@ -173,7 +174,7 @@ describe('ReplayPersistence', () => {
       };
       const persistence = new ReplayPersistence({
         dbName: 'cap-test',
-        storage: capStorage,
+        storage: capStorage as unknown as AsyncStorage,
       });
       await persistence.restore(new TestBuffer());
       expect(cleared).toBe(true);
@@ -203,7 +204,7 @@ describe('ReplayPersistence', () => {
       };
       const persistence = new ReplayPersistence({
         dbName: 'under-cap-test',
-        storage: underCapStorage,
+        storage: underCapStorage as unknown as AsyncStorage,
       });
       await persistence.restore(new TestBuffer());
       expect(deleteUpToCalled).toBe(true);

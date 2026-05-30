@@ -147,10 +147,12 @@ export class CaptureManager {
    */
   private deriveTabScopedDbName(base: string | undefined): string | undefined {
     if (!base) return undefined;
-    if (typeof window === 'undefined' || !window.sessionStorage) {
-      return base;
-    }
+    if (typeof window === 'undefined') return base;
+    // The sessionStorage property GETTER itself can throw a
+    // SecurityError on Safari ITP / Firefox with cookies blocked /
+    // private browsing — the access has to live inside try/catch.
     try {
+      if (!window.sessionStorage) return base;
       const KEY = '__bugspotter_tab_id__';
       let tabId = window.sessionStorage.getItem(KEY);
       if (!tabId) {
@@ -162,9 +164,9 @@ export class CaptureManager {
       }
       return `${base}-${tabId}`;
     } catch {
-      // sessionStorage access threw (cookies/storage blocked).
-      // Fall back to the bare dbName — tabs WILL share, but the
-      // alternative is no persistence at all.
+      // Storage access threw (cookies/storage blocked). Fall back
+      // to the bare dbName — tabs WILL share, but the alternative
+      // is no persistence at all.
       return base;
     }
   }

@@ -33,7 +33,10 @@ vi.mock('rrweb', () => ({
 }));
 
 import { DOMCollector } from '../../src/collectors/dom';
-import type { ReplayPersistence } from '../../src/core/storage/replay-persistence';
+import type {
+  ReplayPersistence,
+  PersistableBuffer,
+} from '../../src/core/storage/replay-persistence';
 
 interface DeferredRestore {
   promise: Promise<void>;
@@ -52,6 +55,28 @@ function makeStubPersistence(restorePromise: Promise<void>): ReplayPersistence {
   return {
     bind: vi.fn(),
     restore: vi.fn().mockReturnValue(restorePromise),
+    flush: vi.fn().mockResolvedValue(undefined),
+    destroy: vi.fn(),
+  } as unknown as ReplayPersistence;
+}
+
+/**
+ * Like makeStubPersistence but the restore actually invokes
+ * buffer.addBatch on resolution — the path the Claude-bot finding
+ * called out as unguarded by the .finally identity check. Use this
+ * in tests that need to verify the destroy/restart guards on the
+ * INNER addBatch path, not just the .finally drain.
+ */
+function makePersistenceThatRestores(
+  restorePromise: Promise<void>,
+  restoredEvents: eventWithTime[]
+): ReplayPersistence {
+  return {
+    bind: vi.fn(),
+    restore: vi.fn().mockImplementation(async (buffer: PersistableBuffer) => {
+      await restorePromise;
+      buffer.addBatch(restoredEvents);
+    }),
     flush: vi.fn().mockResolvedValue(undefined),
     destroy: vi.fn(),
   } as unknown as ReplayPersistence;
@@ -168,5 +193,80 @@ describe('DOMCollector with persistence', () => {
     collector.destroy();
     expect(persistence.destroy).toHaveBeenCalledTimes(1);
     restore.resolve();
+  });
+
+  it('destroy() blocks ReplayPersistence.restore inner addBatch (not just .finally drain)', async () => {
+    // The race the Claude-bot finding called out: previously the
+    // test stub returned a bare promise without invoking buffer.
+    // addBatch, so the guard on the inner path wasn't exercised.
+    // This test uses a stub whose restore DOES invoke addBatch on
+    // resolution, and asserts the guarded buffer wrapper suppresses
+    // it after destroy.
+    const restore = makeDeferred();
+    const restored = [makeEvent(100), makeEvent(200)];
+    const persistence = makePersistenceThatRestores(restore.promise, restored);
+    const collector = new DOMCollector({ persistence });
+    collector.startRecording();
+
+    // destroy() runs BEFORE restore resolves. Buffer cleared,
+    // emitQueue nulled.
+    collector.destroy();
+
+    // Now restore resumes — its inner buffer.addBatch(restored)
+    // fires. Without the guarded-buffer wrapper, the cleared
+    // buffer would be repopulated with `restored` events.
+    restore.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(collector.getEvents()).toHaveLength(0);
+  });
+
+  it('start → stop → start while restore in flight: inner addBatch of restore1 routes nowhere', async () => {
+    // Companion to the above for the restart case. Without the
+    // guarded buffer, restore1's inner buffer.addBatch would land
+    // restored events even though the owner is restore2 now.
+    const restore1 = makeDeferred();
+    const restore2 = makeDeferred();
+    const restored = [makeEvent(500), makeEvent(600)];
+    const persistence = {
+      bind: vi.fn(),
+      restore: vi
+        .fn()
+        .mockImplementationOnce(async (buffer: PersistableBuffer) => {
+          await restore1.promise;
+          buffer.addBatch(restored); // would corrupt without guard
+        })
+        .mockImplementationOnce(async (buffer: PersistableBuffer) => {
+          await restore2.promise;
+          buffer.addBatch(restored);
+        }),
+      flush: vi.fn().mockResolvedValue(undefined),
+      destroy: vi.fn(),
+    } as unknown as ReplayPersistence;
+
+    const collector = new DOMCollector({ persistence });
+    collector.startRecording();
+    collector.stopRecording();
+    collector.startRecording();
+
+    // Resolve restore1 — its inner addBatch should bail because
+    // this.emitQueue points to queue2.
+    restore1.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(collector.getEvents().map(tagOf)).not.toContain(500);
+
+    // Resolve restore2 — its inner addBatch should land.
+    restore2.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const tags = collector.getEvents().map(tagOf);
+    expect(tags.filter((t) => t === 500 || t === 600)).toHaveLength(2);
+    // And not doubled.
+    expect(tags.filter((t) => t === 500)).toHaveLength(1);
+
+    collector.destroy();
   });
 });

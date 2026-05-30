@@ -74,6 +74,13 @@ export class ReplayPersistence {
   // Tracks whether we've ever attached the lifecycle listeners.
   // We bind once per instance — repeated `bind` calls are no-ops.
   private listenerAttached = false;
+  // Idempotency guard: restore reads + deletes the prior session's
+  // events. On a rapid start→stop→start (React 18 StrictMode
+  // double-mount), the second restore would race the first's
+  // deleteUpTo and could re-read + re-add the same records,
+  // doubling them in the buffer. Set synchronously at restore
+  // entry — any subsequent call short-circuits before its readAll.
+  private hasRestored = false;
 
   constructor(options: ReplayPersistenceOptions) {
     this.storage =
@@ -134,6 +141,11 @@ export class ReplayPersistence {
    * after read).
    */
   async restore(buffer: PersistableBuffer): Promise<void> {
+    // Set synchronously BEFORE any await so a re-entrant restore
+    // (rapid restart) sees the flag and short-circuits.
+    if (this.hasRestored) return;
+    this.hasRestored = true;
+
     let results: ReadResult<eventWithTime>[];
     try {
       results = await this.storage.readAll<eventWithTime>(
@@ -154,6 +166,22 @@ export class ReplayPersistence {
       // we still want to clean up storage so the next session
       // doesn't replay the same events.
       logger.warn('ReplayPersistence: addBatch threw:', err);
+    }
+    if (results.length >= RESTORE_LIMIT) {
+      // We hit the cap. readAll is FIFO, so records past the limit
+      // (newer than maxKey) are still in IDB. deleteUpTo(maxKey)
+      // would leave them dangling — they'd be restored in a future
+      // session, fused into a different timeline. Clear the whole
+      // store instead. Trade-off: a pagehide flush that ran
+      // concurrently with this readAll loses its newly-appended
+      // records. That's worse than nothing but better than
+      // cross-session timeline corruption.
+      try {
+        await this.storage.clear(REPLAY_STORE);
+      } catch (err) {
+        logger.warn('ReplayPersistence: restore clear-on-cap failed:', err);
+      }
+      return;
     }
     // deleteUpTo (not clear) so a pagehide flush that fired
     // CONCURRENTLY with this restore — appending new records

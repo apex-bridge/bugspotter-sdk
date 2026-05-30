@@ -2,7 +2,10 @@ import { record } from 'rrweb';
 import type { eventWithTime } from '@rrweb/types';
 import { CircularBuffer } from '../core/buffer';
 import type { Sanitizer } from '../utils/sanitize';
-import type { ReplayPersistence } from '../core/storage/replay-persistence';
+import type {
+  ReplayPersistence,
+  PersistableBuffer,
+} from '../core/storage/replay-persistence';
 import { DEFAULT_REPLAY_DURATION_SECONDS } from '../constants';
 
 export interface DOMCollectorConfig {
@@ -121,9 +124,25 @@ export class DOMCollector {
       const currentQueue: eventWithTime[] = [];
       this.emitQueue = currentQueue;
       const persistence = this.persistence;
-      const buffer = this.buffer;
+      const ownBuffer = this.buffer;
+      // Guarded buffer wrapper: ReplayPersistence.restore calls
+      // buffer.addBatch(restoredEvents) INLINE before its caller
+      // sees the resolved promise. Without a guard, a destroy()
+      // (which clears the buffer + nulls emitQueue) that fires
+      // between readAll and addBatch would have its just-cleared
+      // buffer repopulated with stale prior-session events. The
+      // identity check on emitQueue == currentQueue doubles as a
+      // "this owner is still alive" signal — same identity
+      // discipline as the .finally drain below.
+      const guardedBuffer: PersistableBuffer = {
+        getEvents: () => ownBuffer.getEvents(),
+        addBatch: (events: eventWithTime[]) => {
+          if (this.emitQueue !== currentQueue) return;
+          ownBuffer.addBatch(events);
+        },
+      };
       void persistence
-        .restore(buffer)
+        .restore(guardedBuffer)
         .catch((err) => {
           getLogger().warn('DOMCollector: persistence restore threw:', err);
         })
@@ -131,15 +150,16 @@ export class DOMCollector {
           if (this.emitQueue === currentQueue) {
             this.emitQueue = null;
             if (currentQueue.length > 0) {
-              buffer.addBatch(currentQueue);
+              ownBuffer.addBatch(currentQueue);
             }
           }
         });
       // Bind the pagehide listener synchronously — we want flushes
       // wired before any user interaction, not after the async
-      // restore completes.
+      // restore completes. Pass the OWN buffer (not guarded) so
+      // pagehide flushes get the live event list.
       try {
-        persistence.bind(buffer);
+        persistence.bind(ownBuffer);
       } catch (err) {
         getLogger().warn('DOMCollector: persistence bind threw:', err);
       }

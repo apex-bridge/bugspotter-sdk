@@ -115,6 +115,101 @@ describe('ReplayPersistence', () => {
       persistence.destroy();
     });
 
+    it('is idempotent within an instance: second restore is a no-op even when storage has new records', async () => {
+      // Rapid restart guard: even if a second startRecording fires
+      // a second restore on the SAME persistence instance, the
+      // hasRestored flag short-circuits it. This prevents two
+      // concurrent restores from each reading the same records
+      // (race against deleteUpTo) and doubling them in the buffer.
+      const dbName = uniqueDbName();
+      const seed = new IndexedDbStorage({ dbName });
+      await seed.appendBatch(REPLAY_STORE, [makeEvent(1), makeEvent(2)]);
+      seed.close();
+
+      const persistence = new ReplayPersistence({ dbName });
+      const buf1 = new TestBuffer();
+      await persistence.restore(buf1);
+      expect(buf1.events).toHaveLength(2);
+
+      // Re-seed storage as if a flush landed in between.
+      const reseed = new IndexedDbStorage({ dbName });
+      await reseed.appendBatch(REPLAY_STORE, [makeEvent(10), makeEvent(20)]);
+      reseed.close();
+
+      const buf2 = new TestBuffer();
+      await persistence.restore(buf2);
+      // hasRestored=true short-circuits; second restore is a no-op
+      // regardless of what's in storage.
+      expect(buf2.events).toHaveLength(0);
+      persistence.destroy();
+    });
+
+    it('clears the entire store (not deleteUpTo) when the RESTORE_LIMIT cap is hit', async () => {
+      // The cap-hit path: readAll(REPLAY_STORE, limit) returns the
+      // oldest `limit` records (FIFO). deleteUpTo(maxKey) would
+      // leave any records past the cap in IDB to corrupt future
+      // sessions. Clear-on-cap eliminates them. Stub storage so
+      // readAll returns exactly the limit it was asked for —
+      // mimicking the cap-hit signal the persistence layer uses.
+      let cleared = false;
+      let deleteUpToCalled = false;
+      const capStorage = {
+        append: async () => undefined,
+        appendBatch: async () => undefined,
+        readAll: async (_store: string, limit?: number) => {
+          const n = limit ?? 5000;
+          return Array.from({ length: n }, (_, i) => ({
+            key: i + 1,
+            value: makeEvent(i),
+          }));
+        },
+        deleteUpTo: async () => {
+          deleteUpToCalled = true;
+        },
+        clear: async () => {
+          cleared = true;
+        },
+        close: () => undefined,
+      };
+      const persistence = new ReplayPersistence({
+        dbName: 'cap-test',
+        storage: capStorage,
+      });
+      await persistence.restore(new TestBuffer());
+      expect(cleared).toBe(true);
+      expect(deleteUpToCalled).toBe(false);
+    });
+
+    it('uses deleteUpTo (not clear) when below the RESTORE_LIMIT cap', async () => {
+      // Negative case for the above: under-cap stays on the
+      // race-safe deleteUpTo path so a concurrent pagehide append
+      // survives.
+      let cleared = false;
+      let deleteUpToCalled = false;
+      const underCapStorage = {
+        append: async () => undefined,
+        appendBatch: async () => undefined,
+        readAll: async () => [
+          { key: 1, value: makeEvent(10) },
+          { key: 2, value: makeEvent(20) },
+        ],
+        deleteUpTo: async () => {
+          deleteUpToCalled = true;
+        },
+        clear: async () => {
+          cleared = true;
+        },
+        close: () => undefined,
+      };
+      const persistence = new ReplayPersistence({
+        dbName: 'under-cap-test',
+        storage: underCapStorage,
+      });
+      await persistence.restore(new TestBuffer());
+      expect(deleteUpToCalled).toBe(true);
+      expect(cleared).toBe(false);
+    });
+
     it('soft-fails when storage.readAll throws', async () => {
       // Inject a storage whose readAll throws; restore must not
       // re-throw — the capture flow proceeds unaffected.

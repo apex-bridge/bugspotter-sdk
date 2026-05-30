@@ -140,6 +140,12 @@ export class DOMCollector {
           if (this.emitQueue !== currentQueue) return;
           ownBuffer.addBatch(events);
         },
+        // Signal cancellation to ReplayPersistence so it skips the
+        // deleteUpTo / clear step too. Without this the addBatch
+        // would no-op (correct) but the records would still be
+        // wiped from IDB — phantom delete, prior session's events
+        // lost. Same identity check as addBatch.
+        isAborted: () => this.emitQueue !== currentQueue,
       };
       void persistence
         .restore(guardedBuffer)

@@ -116,6 +116,35 @@ describe('ReplayPersistence', () => {
       persistence.destroy();
     });
 
+    it('destroy() resets hasRestored so a re-bound instance can restore again', async () => {
+      // Internal-state contract: a host that reuses a single
+      // ReplayPersistence across collector lifecycles (uncommon
+      // but possible if the class is exported) shouldn't have its
+      // second restore short-circuit silently.
+      const dbName = uniqueDbName();
+      const seed = new IndexedDbStorage({ dbName });
+      await seed.appendBatch(REPLAY_STORE, [makeEvent(1), makeEvent(2)]);
+      seed.close();
+
+      const persistence = new ReplayPersistence({ dbName });
+      const buf1 = new TestBuffer();
+      await persistence.restore(buf1);
+      expect(buf1.events).toHaveLength(2);
+
+      // Destroy + re-seed (simulating a fresh prior session).
+      persistence.destroy();
+      const reseed = new IndexedDbStorage({ dbName });
+      await reseed.appendBatch(REPLAY_STORE, [makeEvent(3), makeEvent(4)]);
+      reseed.close();
+
+      // Same instance, post-destroy: restore should run again.
+      const buf2 = new TestBuffer();
+      await persistence.restore(buf2);
+      expect(buf2.events).toHaveLength(2);
+      expect(buf2.events.map((e) => e.timestamp)).toEqual([3, 4]);
+      persistence.destroy();
+    });
+
     it('is idempotent within an instance: second restore is a no-op even when storage has new records', async () => {
       // Rapid restart guard: even if a second startRecording fires
       // a second restore on the SAME persistence instance, the
@@ -179,6 +208,77 @@ describe('ReplayPersistence', () => {
       await persistence.restore(new TestBuffer());
       expect(cleared).toBe(true);
       expect(deleteUpToCalled).toBe(false);
+    });
+
+    it('skips addBatch AND deleteUpTo when buffer.isAborted() returns true mid-restore', async () => {
+      // The phantom-delete fix: if the owner (DOMCollector session)
+      // is destroyed or replaced while restore is awaiting readAll,
+      // we must not write to addBatch (no live owner) AND must not
+      // delete the records (next live owner would lose them).
+      let deleted = false;
+      let cleared = false;
+      const storage = {
+        append: async () => undefined,
+        appendBatch: async () => undefined,
+        readAll: async () => [
+          { key: 1, value: makeEvent(10) },
+          { key: 2, value: makeEvent(20) },
+        ],
+        deleteUpTo: async () => {
+          deleted = true;
+        },
+        clear: async () => {
+          cleared = true;
+        },
+        close: () => undefined,
+      };
+      const persistence = new ReplayPersistence({
+        dbName: 'phantom-delete-test',
+        storage: storage as unknown as AsyncStorage,
+      });
+      let addBatchCalled = false;
+      const abortedBuffer: PersistableBuffer = {
+        getEvents: () => [],
+        addBatch: () => {
+          addBatchCalled = true;
+        },
+        isAborted: () => true, // cancellation BEFORE addBatch
+      };
+      await persistence.restore(abortedBuffer);
+      expect(addBatchCalled).toBe(false);
+      expect(deleted).toBe(false);
+      expect(cleared).toBe(false);
+    });
+
+    it('still skips deleteUpTo when isAborted flips true AFTER addBatch (sync teardown)', async () => {
+      // Second guard: addBatch may synchronously unwind the owner
+      // (e.g. an error handler that destroys the SDK). The post-
+      // addBatch check covers that path too.
+      let deleted = false;
+      const storage = {
+        append: async () => undefined,
+        appendBatch: async () => undefined,
+        readAll: async () => [{ key: 1, value: makeEvent(10) }],
+        deleteUpTo: async () => {
+          deleted = true;
+        },
+        clear: async () => undefined,
+        close: () => undefined,
+      };
+      const persistence = new ReplayPersistence({
+        dbName: 'post-addbatch-abort-test',
+        storage: storage as unknown as AsyncStorage,
+      });
+      let aborted = false;
+      const buffer: PersistableBuffer = {
+        getEvents: () => [],
+        addBatch: () => {
+          aborted = true; // sync teardown happens here
+        },
+        isAborted: () => aborted,
+      };
+      await persistence.restore(buffer);
+      expect(deleted).toBe(false);
     });
 
     it('uses deleteUpTo (not clear) when below the RESTORE_LIMIT cap', async () => {

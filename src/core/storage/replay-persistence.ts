@@ -64,6 +64,15 @@ export interface ReplayPersistenceOptions {
 export interface PersistableBuffer {
   getEvents(): eventWithTime[];
   addBatch(events: eventWithTime[]): void;
+  /**
+   * Optional cancellation signal. Implementers return true once the
+   * owner of this buffer (typically the DOMCollector session) has
+   * been destroyed or superseded by a restart. When true, restore
+   * MUST skip both addBatch and deleteUpTo — the records being
+   * restored have no live owner, and deleting them from IDB would
+   * lose them forever. Defaults to "never aborted" when absent.
+   */
+  isAborted?(): boolean;
 }
 
 export class ReplayPersistence {
@@ -159,6 +168,14 @@ export class ReplayPersistence {
     if (results.length === 0) {
       return;
     }
+    // Cancellation check before addBatch + delete. If the owner
+    // (collector session) was destroyed or replaced while we were
+    // awaiting readAll, we must NOT delete records the owner never
+    // received. Returning early preserves them for the next live
+    // restore. See PersistableBuffer.isAborted.
+    if (buffer.isAborted?.()) {
+      return;
+    }
     try {
       buffer.addBatch(results.map((r) => r.value));
     } catch (err) {
@@ -166,6 +183,12 @@ export class ReplayPersistence {
       // we still want to clean up storage so the next session
       // doesn't replay the same events.
       logger.warn('ReplayPersistence: addBatch threw:', err);
+    }
+    // Second cancellation check: addBatch may have synchronously
+    // unwound the owner (e.g. an error handler that destroys the
+    // SDK). Skip delete in that case too.
+    if (buffer.isAborted?.()) {
+      return;
     }
     if (results.length >= RESTORE_LIMIT) {
       // We hit the cap. readAll is FIFO, so records past the limit
@@ -242,6 +265,10 @@ export class ReplayPersistence {
     this.pageshowHandler = null;
     this.listenerAttached = false;
     this.boundBuffer = null;
+    // Reset the idempotency flag so a host that re-uses this
+    // persistence instance with a new collector (uncommon but
+    // possible if exported) can still restore.
+    this.hasRestored = false;
     this.storage.close();
   }
 }

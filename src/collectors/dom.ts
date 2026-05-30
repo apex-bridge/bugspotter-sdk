@@ -2,6 +2,7 @@ import { record } from 'rrweb';
 import type { eventWithTime } from '@rrweb/types';
 import { CircularBuffer } from '../core/buffer';
 import type { Sanitizer } from '../utils/sanitize';
+import type { ReplayPersistence } from '../core/storage/replay-persistence';
 import { DEFAULT_REPLAY_DURATION_SECONDS } from '../constants';
 
 export interface DOMCollectorConfig {
@@ -30,6 +31,14 @@ export interface DOMCollectorConfig {
   blockClass?: string;
   /** Sanitizer for PII protection */
   sanitizer?: Sanitizer;
+  /**
+   * Optional cross-navigation persistence. When set, the collector
+   * restores any prior session's events into the buffer before
+   * starting rrweb, and the persistence layer flushes the buffer
+   * to storage on pagehide. Soft-fails completely independent of
+   * recording — if persistence is broken, capture proceeds normally.
+   */
+  persistence?: ReplayPersistence;
 }
 
 /**
@@ -44,6 +53,13 @@ export class DOMCollector {
   private buffer: CircularBuffer;
   private stopRecordingFn?: () => void;
   private isRecording = false;
+  private persistence?: ReplayPersistence;
+  // When persistence is restoring, rrweb may already be emitting
+  // new events. We queue them here so the restored (older) events
+  // land in the buffer FIRST, preserving chronological order.
+  // After restore settles, queued events are drained in arrival
+  // order into the buffer. null means "no active restoration".
+  private emitQueue: eventWithTime[] | null = null;
   private config: DOMCollectorConfig & {
     duration: number;
     sampling: Required<DOMCollectorConfig['sampling']>;
@@ -76,6 +92,8 @@ export class DOMCollector {
     this.buffer = new CircularBuffer({
       duration: this.config.duration,
     });
+
+    this.persistence = config.persistence;
   }
 
   /**
@@ -87,10 +105,48 @@ export class DOMCollector {
       return;
     }
 
+    // Persistence opt-in: kick off the async restore now. While
+    // it's in flight, rrweb's emit handler routes new events into
+    // `emitQueue` instead of the buffer. After restore settles,
+    // we drain the queue so the timeline reads as
+    //   restored events → events emitted during restore → live
+    // events, preserving chronological order.
+    if (this.persistence) {
+      this.emitQueue = [];
+      const persistence = this.persistence;
+      const buffer = this.buffer;
+      void persistence
+        .restore(buffer)
+        .catch((err) => {
+          getLogger().warn('DOMCollector: persistence restore threw:', err);
+        })
+        .finally(() => {
+          if (this.emitQueue) {
+            const queued = this.emitQueue;
+            this.emitQueue = null;
+            if (queued.length > 0) {
+              buffer.addBatch(queued);
+            }
+          }
+        });
+      // Bind the pagehide listener synchronously — we want flushes
+      // wired before any user interaction, not after the async
+      // restore completes.
+      try {
+        persistence.bind(buffer);
+      } catch (err) {
+        getLogger().warn('DOMCollector: persistence bind threw:', err);
+      }
+    }
+
     try {
       const recordConfig = {
         emit: (event: eventWithTime) => {
-          this.buffer.add(event);
+          if (this.emitQueue) {
+            this.emitQueue.push(event);
+          } else {
+            this.buffer.add(event);
+          }
         },
         sampling: {
           mousemove: this.config.sampling?.mousemove ?? 50,
@@ -215,5 +271,16 @@ export class DOMCollector {
   destroy(): void {
     this.stopRecording();
     this.clearBuffer();
+    if (this.persistence) {
+      // Flush the (now-empty after clearBuffer) buffer is a no-op,
+      // so we don't bother. We DO unbind the pagehide listener so
+      // a re-instantiated SDK doesn't leak handlers.
+      try {
+        this.persistence.destroy();
+      } catch (err) {
+        getLogger().warn('DOMCollector: persistence destroy threw:', err);
+      }
+      this.persistence = undefined;
+    }
   }
 }

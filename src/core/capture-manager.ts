@@ -9,6 +9,7 @@ import { ConsoleCapture } from '../capture/console';
 import { NetworkCapture } from '../capture/network';
 import { MetadataCapture } from '../capture/metadata';
 import { DOMCollector } from '../collectors/dom';
+import { ReplayPersistence } from './storage/replay-persistence';
 import type { Sanitizer } from '../utils/sanitize';
 
 import { DEFAULT_REPLAY_DURATION_SECONDS } from '../constants';
@@ -33,6 +34,19 @@ export interface CaptureManagerConfig {
     recordCrossOriginIframes?: boolean;
     blockSelectors?: string[];
     blockClass?: string;
+    /**
+     * Opt-in: persist rrweb events to IndexedDB on pagehide and
+     * restore them on init. Lets a bug reported AFTER a page
+     * reload still include pre-reload activity. Default off.
+     */
+    persistAcrossNavigation?: boolean;
+    /**
+     * IndexedDB database name used by the persistence layer.
+     * REQUIRED when `persistAcrossNavigation` is true — pick a
+     * stable identifier (apiKey prefix, endpoint hash, tenant id)
+     * so multi-tenant SPAs on the same origin don't share storage.
+     */
+    dbName?: string;
   };
 }
 
@@ -46,6 +60,7 @@ export class CaptureManager {
   private network: NetworkCapture;
   private metadata: MetadataCapture;
   private domCollector?: DOMCollector;
+  private replayPersistence?: ReplayPersistence;
 
   constructor(config: CaptureManagerConfig) {
     // Initialize core capture modules
@@ -70,6 +85,26 @@ export class CaptureManager {
     // Initialize optional replay/DOM collector
     const replayEnabled = config.replay?.enabled ?? true;
     if (replayEnabled) {
+      // Cross-navigation persistence is opt-in. We refuse to enable
+      // it without a dbName because the IDB primitive (slice 1)
+      // rejects empty names and a default would mix tenants on a
+      // shared origin. Better to log + skip than misfire silently.
+      if (config.replay?.persistAcrossNavigation) {
+        const dbName = config.replay?.dbName;
+        if (dbName) {
+          try {
+            this.replayPersistence = new ReplayPersistence({ dbName });
+          } catch (err) {
+            // Constructor shouldn't throw, but soft-fail if it
+            // ever does — replay capture proceeds without
+            // persistence.
+            this.replayPersistence = undefined;
+            // eslint-disable-next-line no-console
+            console.warn('[BugSpotter] Replay persistence init failed:', err);
+          }
+        }
+      }
+
       this.domCollector = new DOMCollector({
         duration: config.replay?.duration ?? DEFAULT_REPLAY_DURATION_SECONDS,
         sampling: config.replay?.sampling,
@@ -81,6 +116,7 @@ export class CaptureManager {
         blockSelectors: config.replay?.blockSelectors,
         blockClass: config.replay?.blockClass,
         sanitizer: config.sanitizer,
+        persistence: this.replayPersistence,
       });
       this.domCollector.startRecording();
     }

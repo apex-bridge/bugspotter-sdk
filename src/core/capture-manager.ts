@@ -154,7 +154,10 @@ export class CaptureManager {
       const KEY = '__bugspotter_tab_id__';
       let tabId = window.sessionStorage.getItem(KEY);
       if (!tabId) {
-        tabId = Math.random().toString(36).slice(2, 10);
+        // padEnd guarantees the 8-char length even on the rare
+        // Math.random() values whose base-36 string is shorter
+        // (e.g. 0.5 → "0.i"). The test regex pins exact length.
+        tabId = Math.random().toString(36).slice(2, 10).padEnd(8, '0');
         window.sessionStorage.setItem(KEY, tabId);
       }
       return `${base}-${tabId}`;

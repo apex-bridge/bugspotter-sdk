@@ -520,6 +520,61 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('openCursor throw containment', () => {
+    const originalIndexedDB = globalThis.indexedDB;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: originalIndexedDB,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it('resolves [] when tx.objectStore(store).openCursor() throws synchronously', async () => {
+      // openCursor can throw TransactionInactiveError, DataError,
+      // InvalidStateError synchronously. Without the inner try/
+      // catch, the throw rejects readAll's Promise — soft-fail
+      // contract violation. This test pins it.
+      const fakeStore = {
+        openCursor: () => {
+          throw new DOMException('tx finished', 'InvalidStateError');
+        },
+      };
+      const fakeTx = {
+        objectStore: () => fakeStore,
+        oncomplete: undefined,
+        onerror: undefined,
+        onabort: undefined,
+        error: null,
+        abort: () => undefined,
+      };
+      const fakeDb = {
+        objectStoreNames: { contains: () => true },
+        close: () => undefined,
+        transaction: () => fakeTx,
+      };
+      const successReq: { result: typeof fakeDb; onsuccess?: () => void } = {
+        result: fakeDb,
+      };
+      const fakeOpen = vi.fn(() => {
+        queueMicrotask(() => successReq.onsuccess?.());
+        return successReq;
+      });
+      Object.defineProperty(globalThis, 'indexedDB', {
+        value: { open: fakeOpen },
+        configurable: true,
+        writable: true,
+      });
+
+      const storage = new IndexedDbStorage({ dbName: 'opencursor-throw' });
+      // Without the try/catch around openCursor, the sync throw
+      // would reject this — soft-fail contract demands resolve [].
+      await expect(storage.readAll(REPLAY_STORE)).resolves.toEqual([]);
+      storage.close();
+    });
+  });
+
   describe('cursor read throw containment', () => {
     const originalIndexedDB = globalThis.indexedDB;
 

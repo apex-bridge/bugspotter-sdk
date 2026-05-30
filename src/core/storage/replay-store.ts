@@ -338,7 +338,22 @@ export class IndexedDbStorage implements AsyncStorage {
       // auto-increment key alongside each value. The key is what
       // deleteUpTo will scope the range to.
       const results: ReadResult<T>[] = [];
-      const req = tx.objectStore(store).openCursor();
+      let req: IDBRequest;
+      try {
+        req = tx.objectStore(store).openCursor();
+      } catch (err) {
+        // tx.objectStore can throw NotFoundError (schema drift),
+        // openCursor can throw TransactionInactiveError /
+        // DataError / InvalidStateError. A sync throw inside a
+        // Promise executor would reject the Promise — violates
+        // the soft-fail contract. Resolve with [] instead.
+        logger.warn(
+          `IndexedDB readAll(${store}) openCursor failed, soft-failing:`,
+          err
+        );
+        settle([]);
+        return;
+      }
       req.onsuccess = () => {
         // cursor.value is a getter that performs structured-clone
         // deserialization — corrupted stored data can throw
@@ -424,7 +439,16 @@ export class IndexedDbStorage implements AsyncStorage {
    * non-standard envs) but the connection is silently evicted.
    */
   private clearCacheIfInvalidState(db: IDBDatabase, err: unknown): void {
-    if (err instanceof DOMException && err.name === 'InvalidStateError') {
+    // Check `name` directly rather than `instanceof DOMException`
+    // — the global isn't defined in every runtime the SDK might
+    // ship into (older Node, some custom runtimes), and the
+    // instanceof check itself would throw ReferenceError there.
+    if (
+      err !== null &&
+      typeof err === 'object' &&
+      'name' in err &&
+      (err as { name: unknown }).name === 'InvalidStateError'
+    ) {
       if (this.db === db) {
         this.db = null;
         this.dbPromise = null;

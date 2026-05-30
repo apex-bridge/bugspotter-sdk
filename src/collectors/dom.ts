@@ -112,7 +112,14 @@ export class DOMCollector {
     //   restored events → events emitted during restore → live
     // events, preserving chronological order.
     if (this.persistence) {
-      this.emitQueue = [];
+      // Identity-guarded queue: hold a closure-local reference so
+      // if startRecording is called → stopped → restarted while
+      // THIS restore is still in flight (React 18 StrictMode
+      // double-mount; rapid restart), the second session's queue
+      // (queue2) isn't clobbered by this restore's finally. Only
+      // drain when this.emitQueue still matches OUR queue.
+      const currentQueue: eventWithTime[] = [];
+      this.emitQueue = currentQueue;
       const persistence = this.persistence;
       const buffer = this.buffer;
       void persistence
@@ -121,11 +128,10 @@ export class DOMCollector {
           getLogger().warn('DOMCollector: persistence restore threw:', err);
         })
         .finally(() => {
-          if (this.emitQueue) {
-            const queued = this.emitQueue;
+          if (this.emitQueue === currentQueue) {
             this.emitQueue = null;
-            if (queued.length > 0) {
-              buffer.addBatch(queued);
+            if (currentQueue.length > 0) {
+              buffer.addBatch(currentQueue);
             }
           }
         });

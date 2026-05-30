@@ -148,18 +148,24 @@ describe('ReplayPersistence', () => {
     });
 
     it('writes the bound buffer events to storage', async () => {
-      buffer.events = [makeEvent(100), makeEvent(200)];
-      persistence.bind(buffer);
-      await persistence.flush();
+      // Use an explicit dbName so we can probe storage independently
+      // after flush — the previous version only asserted the dbName
+      // field existed, which didn't verify any data actually landed.
+      const dbName = uniqueDbName();
+      const owned = new ReplayPersistence({ dbName });
+      const buf = new TestBuffer();
+      buf.events = [makeEvent(100), makeEvent(200)];
+      owned.bind(buf);
+      await owned.flush();
 
-      // Confirm by reading back from a fresh storage on the same
-      // dbName.
-      // (We can't introspect the persistence's own storage; use a
-      // probe instance.)
-      const dbName = (persistence as unknown as { storage: IndexedDbStorage })
-        .storage['dbName' as keyof IndexedDbStorage];
-      expect(dbName).toBeTruthy();
-      persistence.destroy();
+      // Probe: read back through a fresh storage instance on the
+      // same dbName. The flushed events must be present.
+      const probe = new IndexedDbStorage({ dbName });
+      const remaining = await probe.readAll<eventWithTime>(REPLAY_STORE);
+      expect(remaining).toHaveLength(2);
+      expect(remaining.map((r) => r.value.timestamp)).toEqual([100, 200]);
+      probe.close();
+      owned.destroy();
     });
 
     it('is a no-op when no buffer is bound', async () => {

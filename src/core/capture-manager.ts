@@ -102,6 +102,14 @@ export class CaptureManager {
             // eslint-disable-next-line no-console
             console.warn('[BugSpotter] Replay persistence init failed:', err);
           }
+        } else {
+          // The host opted in but didn't provide dbName. Surface
+          // this loudly — otherwise they'd assume replay persists
+          // across navigations and silently get nothing.
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[BugSpotter] persistAcrossNavigation enabled but dbName not set; cross-navigation replay will not persist'
+          );
         }
       }
 

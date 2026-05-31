@@ -236,6 +236,10 @@ export class ReplayPersistence {
     if (results.length === 0) {
       return;
     }
+    // Hoist the unwrap once — `results` can be up to RESTORE_LIMIT
+    // (5000) entries and both downstream paths (re-append on abort,
+    // addBatch on live owner) need the same value array.
+    const events = results.map((r) => r.value);
     // Cancellation check before addBatch. If the owner (collector
     // session) was destroyed or replaced while we were awaiting
     // readAndClear, the records are in memory but IDB was already
@@ -245,10 +249,7 @@ export class ReplayPersistence {
     // the new atomic primitive.
     if (buffer.isAborted?.()) {
       try {
-        await this.storage.appendBatch(
-          REPLAY_STORE,
-          results.map((r) => r.value)
-        );
+        await this.storage.appendBatch(REPLAY_STORE, events);
       } catch (err) {
         logger.warn(
           'ReplayPersistence: restore re-append on abort failed:',
@@ -258,7 +259,7 @@ export class ReplayPersistence {
       return;
     }
     try {
-      buffer.addBatch(results.map((r) => r.value));
+      buffer.addBatch(events);
     } catch (err) {
       // CircularBuffer.addBatch shouldn't throw; if it does the
       // records are already gone from IDB (readAndClear was

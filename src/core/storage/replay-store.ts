@@ -524,6 +524,11 @@ export class IndexedDbStorage implements AsyncStorage {
           } catch {
             // already aborted/finished — fine
           }
+          // Settle unconditionally (matches runTransaction's pattern):
+          // if tx.abort itself throws AND onabort/onerror never fire,
+          // the Promise would otherwise hang. The `settled` flag
+          // dedupes any later onabort.
+          settle([]);
         }
       };
       req.onerror = (event) => {

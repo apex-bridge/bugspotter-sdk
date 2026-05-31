@@ -255,6 +255,13 @@ export class ReplayPersistence {
           'ReplayPersistence: restore re-append on abort failed:',
           err
         );
+      } finally {
+        // If destroy() ran during the readAndClear await, it already
+        // closed the storage. appendBatch above lazily reopened a
+        // new connection — nothing else will close it, so close
+        // here. close() is idempotent; if destroy() comes later it's
+        // a no-op the second time.
+        this.storage.close();
       }
       return;
     }

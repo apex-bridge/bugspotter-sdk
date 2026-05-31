@@ -508,12 +508,16 @@ export class IndexedDbStorage implements AsyncStorage {
             }
           }
           // Cursor done — either naturally exhausted (cursor=null)
-          // or the limit was just reached. Either way, clear the
-          // store within THIS same readwrite tx. IDB serializes
-          // transactions, so any concurrent appendBatch will run
-          // either before us (we already read it) or after (lands
-          // in the cleared store) — neither path loses data.
-          objectStore.clear();
+          // or the limit was just reached. Clear the store within
+          // THIS same readwrite tx IF we read any records — empty-
+          // store case is a no-op at the data level but still pays
+          // the IDB request roundtrip. IDB serializes transactions,
+          // so any concurrent appendBatch will run either before us
+          // (we already read it) or after (lands in the cleared
+          // store) — neither path loses data.
+          if (results.length > 0) {
+            objectStore.clear();
+          }
         } catch (err) {
           logger.warn(
             `IndexedDB readAndClear(${store}) cursor read failed:`,

@@ -230,6 +230,7 @@ describe('ReplayPersistence', () => {
       // contract, we re-append them so the next live restore picks
       // them up.
       const appendBatchCalls: eventWithTime[][] = [];
+      let closeCalls = 0;
       const restoredRecords = [
         { key: 1, value: makeEvent(10) },
         { key: 2, value: makeEvent(20) },
@@ -243,7 +244,9 @@ describe('ReplayPersistence', () => {
         deleteUpTo: async () => undefined,
         clear: async () => undefined,
         readAndClear: async () => restoredRecords,
-        close: () => undefined,
+        close: () => {
+          closeCalls++;
+        },
       };
       const persistence = new ReplayPersistence({
         dbName: 'phantom-delete-test',
@@ -263,6 +266,12 @@ describe('ReplayPersistence', () => {
       // Records were re-appended to IDB for the next live restore.
       expect(appendBatchCalls).toHaveLength(1);
       expect(appendBatchCalls[0].map((e) => e.timestamp)).toEqual([10, 20]);
+      // Storage was closed after the re-append. Without this, a
+      // destroy() that ran during the readAndClear await would have
+      // closed the original connection, and our re-append would have
+      // lazily opened a new one — leaked because nothing else closes
+      // it.
+      expect(closeCalls).toBe(1);
     });
 
     it('does NOT re-append when isAborted flips true AFTER addBatch (sync teardown is accepted loss)', async () => {

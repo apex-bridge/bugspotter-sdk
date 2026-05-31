@@ -98,14 +98,21 @@ export class ReplayPersistence {
   // next restore. Reset to 0 on bfcache clear (memory buffer is
   // authoritative there, IDB is wiped) and on destroy().
   private lastFlushedTimestamp = 0;
-  // Serialization guard: visibilitychange and pagehide can fire in
-  // quick succession, kicking off two concurrent flush() calls. Both
-  // read the buffer + same watermark before either appendBatch
-  // resolves — without this flag they'd both write the same delta,
-  // landing duplicates in IDB. A re-entrant flush during in-flight
-  // is dropped; the buffer state at the second trigger is rarely
-  // meaningfully newer than at the first.
-  private flushInFlight = false;
+  // Serialization chain. Concurrent flush() calls (visibilitychange
+  // followed by pagehide on the same desktop navigation) are queued
+  // onto this promise so they run one after another. The second
+  // flush re-reads the buffer + watermark, so it picks up events
+  // that landed between the first and second trigger (no data loss
+  // on unload), and writes nothing if there's no delta. Async
+  // operations that affect IDB state (bfcache clear) are also
+  // chained here so subsequent flushes wait for them.
+  private flushPromise: Promise<void> = Promise.resolve();
+  // Generation counter. Bumped on bfcache reset and destroy so an
+  // in-flight flush that resolves AFTER the reset doesn't clobber
+  // the just-reset watermark with its stale high-value computation.
+  // Each flush captures the generation at start and only updates
+  // the watermark if the generation hasn't changed.
+  private flushGeneration = 0;
 
   constructor(options: ReplayPersistenceOptions) {
     this.storage =
@@ -146,15 +153,24 @@ export class ReplayPersistence {
       if (!event.persisted) {
         return;
       }
-      void this.storage.clear(REPLAY_STORE).catch((err) => {
-        logger.warn('ReplayPersistence: bfcache clear failed:', err);
-      });
-      // IDB just got wiped but the in-memory buffer is intact. Reset
-      // the watermark so the next pagehide flush re-writes the
-      // buffer's events — otherwise their timestamps would be below
-      // the watermark and silently skipped, leaving IDB empty for
-      // the next restore.
+      // Bump generation FIRST so any in-flight flush (kicked off by
+      // a pagehide that fired just before bfcache entry) sees the
+      // new generation when it eventually resolves and skips its
+      // watermark update — its high-watermark value is stale once
+      // we reset below.
+      this.flushGeneration++;
       this.lastFlushedTimestamp = 0;
+      // Chain the clear onto flushPromise so any pagehide-triggered
+      // flush after the user navigates away again is queued AFTER
+      // clear() completes. Without this chain, pagehide's
+      // appendBatch could race ahead of clear in the IDB transaction
+      // queue and have its events wiped.
+      this.flushPromise = this.flushPromise
+        .catch(() => undefined)
+        .then(() => this.storage.clear(REPLAY_STORE))
+        .catch((err) => {
+          logger.warn('ReplayPersistence: bfcache clear failed:', err);
+        });
     };
     // Mobile reliability: on iOS Safari the OS can kill backgrounded
     // tabs WITHOUT firing pagehide. visibilitychange fires earlier
@@ -264,56 +280,65 @@ export class ReplayPersistence {
    * the pagehide handler and exposed for tests / explicit triggers.
    * Soft-fails on every error path.
    */
-  async flush(): Promise<void> {
+  flush(): Promise<void> {
+    if (!this.boundBuffer) {
+      return Promise.resolve();
+    }
+    // Chain onto flushPromise so concurrent flushes (visibilitychange
+    // followed by pagehide) run sequentially. The second flush re-
+    // reads the buffer + watermark, picking up events that landed
+    // between the two triggers. Capture generation BEFORE the await
+    // so a bfcache reset or destroy mid-flight invalidates this
+    // flush's watermark update.
+    const generation = this.flushGeneration;
+    this.flushPromise = this.flushPromise
+      .catch(() => undefined)
+      .then(() => this.runFlush(generation));
+    return this.flushPromise;
+  }
+
+  private async runFlush(generation: number): Promise<void> {
     if (!this.boundBuffer) {
       return;
     }
-    // Drop re-entrant flushes. visibilitychange + pagehide can fire
-    // microseconds apart; without this, both observe the same
-    // watermark and the same buffer, producing two appendBatch
-    // calls with the same delta — duplicates on next restore.
-    if (this.flushInFlight) {
+    let events: eventWithTime[];
+    try {
+      events = this.boundBuffer.getEvents();
+    } catch (err) {
+      logger.warn('ReplayPersistence: flush read-from-buffer failed:', err);
       return;
     }
-    this.flushInFlight = true;
+    if (events.length === 0) {
+      return;
+    }
+    // Dedup: only events strictly newer than the last successful
+    // flush. rrweb's timestamps are monotonic in practice but not
+    // guaranteed in all orderings, so we use `>` (not `>=`) and
+    // recompute the watermark via max() rather than trusting the
+    // last array element.
+    const cutoff = this.lastFlushedTimestamp;
+    const fresh =
+      cutoff === 0 ? events : events.filter((e) => e.timestamp > cutoff);
+    if (fresh.length === 0) {
+      return;
+    }
     try {
-      let events: eventWithTime[];
-      try {
-        events = this.boundBuffer.getEvents();
-      } catch (err) {
-        logger.warn('ReplayPersistence: flush read-from-buffer failed:', err);
+      await this.storage.appendBatch(REPLAY_STORE, fresh);
+      // Only advance the watermark on successful write AND if the
+      // generation hasn't changed during the await. A bfcache reset
+      // or destroy that fired mid-flush bumped the generation; in
+      // that case our high-watermark value is stale state and would
+      // silently skip events on the next flush.
+      if (generation !== this.flushGeneration) {
         return;
       }
-      if (events.length === 0) {
-        return;
+      let maxTs = cutoff;
+      for (const e of fresh) {
+        if (e.timestamp > maxTs) maxTs = e.timestamp;
       }
-      // Dedup: only events strictly newer than the last successful
-      // flush. rrweb's timestamps are monotonic in practice but not
-      // guaranteed in all orderings, so we use `>` (not `>=`) and
-      // recompute the watermark via max() rather than trusting the
-      // last array element.
-      const cutoff = this.lastFlushedTimestamp;
-      const fresh =
-        cutoff === 0 ? events : events.filter((e) => e.timestamp > cutoff);
-      if (fresh.length === 0) {
-        return;
-      }
-      try {
-        await this.storage.appendBatch(REPLAY_STORE, fresh);
-        // Only advance the watermark on successful write. On failure
-        // the next flush retries the same delta (acceptable: storage
-        // is best-effort, and a partial write rolling back is also
-        // OK — we'd re-append on the next try).
-        let maxTs = cutoff;
-        for (const e of fresh) {
-          if (e.timestamp > maxTs) maxTs = e.timestamp;
-        }
-        this.lastFlushedTimestamp = maxTs;
-      } catch (err) {
-        logger.warn('ReplayPersistence: flush appendBatch failed:', err);
-      }
-    } finally {
-      this.flushInFlight = false;
+      this.lastFlushedTimestamp = maxTs;
+    } catch (err) {
+      logger.warn('ReplayPersistence: flush appendBatch failed:', err);
     }
   }
 
@@ -358,6 +383,11 @@ export class ReplayPersistence {
     // Reset the flush watermark too — a re-used instance must not
     // skip writes because of a stale prior session's threshold.
     this.lastFlushedTimestamp = 0;
+    // Bump generation + reset the chain so any pending/in-flight
+    // flush bails on its watermark update and a re-used instance
+    // starts from a clean serial point.
+    this.flushGeneration++;
+    this.flushPromise = Promise.resolve();
     this.storage.close();
   }
 }

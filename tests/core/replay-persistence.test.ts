@@ -501,11 +501,13 @@ describe('ReplayPersistence', () => {
       persistence.destroy();
     });
 
-    it('serializes re-entrant flushes via flushInFlight (the visibility+pagehide race)', async () => {
+    it('serializes re-entrant flushes via flushPromise chain (no double-write, no data loss)', async () => {
       // visibilitychange and pagehide can fire microseconds apart.
-      // Without the flushInFlight guard, both observe the same
-      // watermark + buffer and both write — landing duplicates in
-      // IDB. The guard makes the second a no-op.
+      // The chain serializes them: the second flush waits for the
+      // first to complete, re-reads the buffer + watermark, and
+      // only writes the delta (empty here, so no second append).
+      // This is the watermark+chain replacement of the older
+      // flushInFlight boolean.
       const dbName = uniqueDbName();
       let appendCalls = 0;
       const slowAppendStorage = {
@@ -515,7 +517,7 @@ describe('ReplayPersistence', () => {
           events: eventWithTime[]
         ): Promise<void> => {
           appendCalls++;
-          // Delay so a concurrent flush() call observes flushInFlight.
+          // Delay so a concurrent flush() call enqueues onto chain.
           await new Promise((r) => setTimeout(r, 30));
           // Pass through to a real storage so we can probe afterwards.
           const real = new IndexedDbStorage({ dbName });
@@ -535,8 +537,9 @@ describe('ReplayPersistence', () => {
       buf.events = [makeEvent(700), makeEvent(800)];
       persistence.bind(buf);
 
-      // Fire two flushes back-to-back. The second should bail out
-      // immediately because flushInFlight is set.
+      // Fire two flushes back-to-back. The second runs after the
+      // first via the chain; with no new events, its delta is
+      // empty so appendBatch is only called once.
       const p1 = persistence.flush();
       const p2 = persistence.flush();
       await Promise.all([p1, p2]);
@@ -546,6 +549,139 @@ describe('ReplayPersistence', () => {
       const records = await probe.readAll<eventWithTime>(REPLAY_STORE);
       probe.close();
       expect(records).toHaveLength(2);
+      persistence.destroy();
+    });
+
+    it('chained flushes pick up events added between the two triggers (no data loss on unload)', async () => {
+      // The reason the chain replaces the boolean flag: a second
+      // flush triggered between the first's read and resolve must
+      // not be dropped — any events that landed in the buffer in
+      // that window need to be written too.
+      const dbName = uniqueDbName();
+      const slowAppendStorage = {
+        append: async () => undefined,
+        appendBatch: async (
+          store: string,
+          events: eventWithTime[]
+        ): Promise<void> => {
+          // Delay the first batch enough that the test can add new
+          // events to the buffer before the chain processes the
+          // second flush.
+          await new Promise((r) => setTimeout(r, 40));
+          const real = new IndexedDbStorage({ dbName });
+          await real.appendBatch(store, events);
+          real.close();
+        },
+        readAll: async () => [],
+        deleteUpTo: async () => undefined,
+        clear: async () => undefined,
+        close: () => undefined,
+      };
+      const persistence = new ReplayPersistence({
+        dbName,
+        storage: slowAppendStorage as unknown as AsyncStorage,
+      });
+      const buf = new TestBuffer();
+      buf.events = [makeEvent(100), makeEvent(200)];
+      persistence.bind(buf);
+
+      // First flush in flight (slow), add new events, then second
+      // flush. Second waits for first via the chain, sees the new
+      // events, writes them.
+      const p1 = persistence.flush();
+      await new Promise((r) => setTimeout(r, 5));
+      buf.events.push(makeEvent(300), makeEvent(400));
+      const p2 = persistence.flush();
+      await Promise.all([p1, p2]);
+
+      const probe = new IndexedDbStorage({ dbName });
+      const records = await probe.readAll<eventWithTime>(REPLAY_STORE);
+      probe.close();
+      // All four events landed — the late additions would have been
+      // lost under the older flushInFlight-bool design.
+      expect(
+        records.map((r) => r.value.timestamp).sort((a, b) => a - b)
+      ).toEqual([100, 200, 300, 400]);
+      persistence.destroy();
+    });
+
+    it('generation guard: watermark NOT overwritten if destroy bumps generation mid-flush', async () => {
+      // The race the bot called out: a slow flush is in-flight when
+      // destroy() resets the watermark + bumps generation. Without
+      // the generation guard, the flush's resolve would write the
+      // stale high-watermark value, breaking the re-used instance.
+      const dbName = uniqueDbName();
+      let appendCalls = 0;
+      let releaseFirstAppend: () => void = () => undefined;
+      let signalFirstAppendStarted: () => void = () => undefined;
+      const firstAppendStarted = new Promise<void>((r) => {
+        signalFirstAppendStarted = r;
+      });
+      const stagedStorage = {
+        append: async () => undefined,
+        appendBatch: async (
+          store: string,
+          events: eventWithTime[]
+        ): Promise<void> => {
+          appendCalls++;
+          if (appendCalls === 1) {
+            // Signal that we're past the start of the block so the
+            // test can call destroy() + release the gate. Without
+            // this, the test's release call would race ahead of
+            // appendBatch (the chain has a microtask boundary
+            // before runFlush starts) and hit a stale no-op
+            // releaser.
+            signalFirstAppendStarted();
+            await new Promise<void>((r) => {
+              releaseFirstAppend = r;
+            });
+          }
+          const real = new IndexedDbStorage({ dbName });
+          await real.appendBatch(store, events);
+          real.close();
+        },
+        readAll: async () => [],
+        deleteUpTo: async () => undefined,
+        clear: async () => undefined,
+        close: () => undefined,
+      };
+      const persistence = new ReplayPersistence({
+        dbName,
+        storage: stagedStorage as unknown as AsyncStorage,
+      });
+      const buf = new TestBuffer();
+      buf.events = [makeEvent(9000)];
+      persistence.bind(buf);
+
+      const flushPromise = persistence.flush();
+      // Wait until the first appendBatch is actually inside the
+      // block before bumping the generation.
+      await firstAppendStarted;
+      persistence.destroy();
+      releaseFirstAppend();
+      await flushPromise;
+
+      // After destroy + bump, the previous instance's watermark must
+      // still be 0. Behavioral check: re-bind a fresh buffer with
+      // SMALL timestamps. If the watermark had been clobbered to
+      // 9000 by the in-flight flush, these would be silently
+      // skipped. Second appendBatch is non-blocking.
+      const buf2 = new TestBuffer();
+      buf2.events = [makeEvent(50), makeEvent(100)];
+      persistence.bind(buf2); // re-use the destroyed instance
+      await persistence.flush();
+
+      const probe = new IndexedDbStorage({ dbName });
+      const records = await probe.readAll<eventWithTime>(REPLAY_STORE);
+      probe.close();
+      const timestamps = records
+        .map((r) => r.value.timestamp)
+        .sort((a, b) => a - b);
+      // The 9000 was written by the (now-detached) first flush; the
+      // 50 and 100 land only if the watermark wasn't clobbered to
+      // 9000 by that flush's late watermark update.
+      expect(timestamps).toContain(50);
+      expect(timestamps).toContain(100);
       persistence.destroy();
     });
   });
@@ -664,6 +800,69 @@ describe('ReplayPersistence', () => {
       probe.close();
       expect(records).toHaveLength(2);
       expect(records.map((r) => r.value.timestamp)).toEqual([1000, 2000]);
+      persistence.destroy();
+    });
+
+    it('chains the bfcache clear into flushPromise so a pagehide-after-pageshow waits for it', async () => {
+      // The race Claude bot called out: pageshow's clear() is
+      // fire-and-forget. If pagehide fires in between, its
+      // appendBatch could race ahead of clear in IDB's transaction
+      // queue and have its events wiped. The chain forces ordering:
+      // pagehide's flush enqueues onto flushPromise AFTER the clear
+      // that pageshow already chained.
+      const dbName = uniqueDbName();
+      const opOrder: string[] = [];
+      const orderedStorage = {
+        append: async () => undefined,
+        appendBatch: async (
+          store: string,
+          events: eventWithTime[]
+        ): Promise<void> => {
+          // Brief delay to ensure ordering is observable.
+          await new Promise((r) => setTimeout(r, 10));
+          opOrder.push('appendBatch');
+          const real = new IndexedDbStorage({ dbName });
+          await real.appendBatch(store, events);
+          real.close();
+        },
+        readAll: async () => [],
+        deleteUpTo: async () => undefined,
+        clear: async () => {
+          await new Promise((r) => setTimeout(r, 10));
+          opOrder.push('clear');
+          const real = new IndexedDbStorage({ dbName });
+          await real.clear(REPLAY_STORE);
+          real.close();
+        },
+        close: () => undefined,
+      };
+      const persistence = new ReplayPersistence({
+        dbName,
+        storage: orderedStorage as unknown as AsyncStorage,
+      });
+      const buffer = new TestBuffer();
+      buffer.events = [makeEvent(7000), makeEvent(8000)];
+      persistence.bind(buffer);
+
+      // Trigger bfcache pageshow first (queues clear onto chain),
+      // then pagehide (queues flush onto chain right after).
+      const pageshowEvent = new Event('pageshow') as Event & {
+        persisted: boolean;
+      };
+      Object.defineProperty(pageshowEvent, 'persisted', { value: true });
+      window.dispatchEvent(pageshowEvent);
+      window.dispatchEvent(new Event('pagehide'));
+      // Wait for the chain to drain.
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Clear must have run before appendBatch. If it ran after, the
+      // appendBatch's events would have been wiped.
+      expect(opOrder).toEqual(['clear', 'appendBatch']);
+      // Final state: the two events from the buffer are in IDB.
+      const probe = new IndexedDbStorage({ dbName });
+      const records = await probe.readAll<eventWithTime>(REPLAY_STORE);
+      probe.close();
+      expect(records).toHaveLength(2);
       persistence.destroy();
     });
   });

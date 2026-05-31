@@ -174,30 +174,37 @@ describe('ReplayPersistence', () => {
       persistence.destroy();
     });
 
-    it('clears the entire store (not deleteUpTo) when the RESTORE_LIMIT cap is hit', async () => {
-      // The cap-hit path: readAll(REPLAY_STORE, limit) returns the
-      // oldest `limit` records (FIFO). deleteUpTo(maxKey) would
-      // leave any records past the cap in IDB to corrupt future
-      // sessions. Clear-on-cap eliminates them. Stub storage so
-      // readAll returns exactly the limit it was asked for —
-      // mimicking the cap-hit signal the persistence layer uses.
-      let cleared = false;
-      let deleteUpToCalled = false;
+    it('uses readAndClear (single atomic IDB tx) for the cap-hit case', async () => {
+      // Slice 3 change: cap-hit used to do readAll + clear as two
+      // ops, with a race window between them. Now a single atomic
+      // readAndClear handles both. Stub readAndClear to verify it's
+      // the one called (not the obsolete readAll → clear two-step).
+      let readAndClearCalls = 0;
+      let readAndClearLimit: number | undefined;
+      let readAllCalls = 0;
+      let clearCalls = 0;
+      let deleteUpToCalls = 0;
       const capStorage = {
         append: async () => undefined,
         appendBatch: async () => undefined,
-        readAll: async (_store: string, limit?: number) => {
+        readAll: async () => {
+          readAllCalls++;
+          return [];
+        },
+        deleteUpTo: async () => {
+          deleteUpToCalls++;
+        },
+        clear: async () => {
+          clearCalls++;
+        },
+        readAndClear: async (_store: string, limit?: number) => {
+          readAndClearCalls++;
+          readAndClearLimit = limit;
           const n = limit ?? 5000;
           return Array.from({ length: n }, (_, i) => ({
             key: i + 1,
             value: makeEvent(i),
           }));
-        },
-        deleteUpTo: async () => {
-          deleteUpToCalled = true;
-        },
-        clear: async () => {
-          cleared = true;
         },
         close: () => undefined,
       };
@@ -206,30 +213,36 @@ describe('ReplayPersistence', () => {
         storage: capStorage as unknown as AsyncStorage,
       });
       await persistence.restore(new TestBuffer());
-      expect(cleared).toBe(true);
-      expect(deleteUpToCalled).toBe(false);
+      expect(readAndClearCalls).toBe(1);
+      expect(readAndClearLimit).toBe(5000);
+      // No separate readAll / clear / deleteUpTo — atomicity is the
+      // whole point.
+      expect(readAllCalls).toBe(0);
+      expect(clearCalls).toBe(0);
+      expect(deleteUpToCalls).toBe(0);
     });
 
-    it('skips addBatch AND deleteUpTo when buffer.isAborted() returns true mid-restore', async () => {
-      // The phantom-delete fix: if the owner (DOMCollector session)
-      // is destroyed or replaced while restore is awaiting readAll,
-      // we must not write to addBatch (no live owner) AND must not
-      // delete the records (next live owner would lose them).
-      let deleted = false;
-      let cleared = false;
+    it('re-appends records to storage when buffer.isAborted() after readAndClear', async () => {
+      // Slice 3 replacement of the slice 2 round 4 phantom-delete
+      // fix. readAndClear is atomic, so the records have ALREADY
+      // been removed from IDB by the time we check isAborted. To
+      // preserve the "destroy-during-restore preserves records"
+      // contract, we re-append them so the next live restore picks
+      // them up.
+      const appendBatchCalls: eventWithTime[][] = [];
+      const restoredRecords = [
+        { key: 1, value: makeEvent(10) },
+        { key: 2, value: makeEvent(20) },
+      ];
       const storage = {
         append: async () => undefined,
-        appendBatch: async () => undefined,
-        readAll: async () => [
-          { key: 1, value: makeEvent(10) },
-          { key: 2, value: makeEvent(20) },
-        ],
-        deleteUpTo: async () => {
-          deleted = true;
+        appendBatch: async (_store: string, events: eventWithTime[]) => {
+          appendBatchCalls.push(events);
         },
-        clear: async () => {
-          cleared = true;
-        },
+        readAll: async () => [],
+        deleteUpTo: async () => undefined,
+        clear: async () => undefined,
+        readAndClear: async () => restoredRecords,
         close: () => undefined,
       };
       const persistence = new ReplayPersistence({
@@ -242,27 +255,31 @@ describe('ReplayPersistence', () => {
         addBatch: () => {
           addBatchCalled = true;
         },
-        isAborted: () => true, // cancellation BEFORE addBatch
+        isAborted: () => true, // cancellation observed AFTER readAndClear
       };
       await persistence.restore(abortedBuffer);
+      // buffer.addBatch is NOT called — owner is gone.
       expect(addBatchCalled).toBe(false);
-      expect(deleted).toBe(false);
-      expect(cleared).toBe(false);
+      // Records were re-appended to IDB for the next live restore.
+      expect(appendBatchCalls).toHaveLength(1);
+      expect(appendBatchCalls[0].map((e) => e.timestamp)).toEqual([10, 20]);
     });
 
-    it('still skips deleteUpTo when isAborted flips true AFTER addBatch (sync teardown)', async () => {
-      // Second guard: addBatch may synchronously unwind the owner
-      // (e.g. an error handler that destroys the SDK). The post-
-      // addBatch check covers that path too.
-      let deleted = false;
+    it('does NOT re-append when isAborted flips true AFTER addBatch (sync teardown is accepted loss)', async () => {
+      // Slice 3 trade-off note: we can't distinguish "addBatch
+      // landed and THEN owner died" from "addBatch was dead on
+      // arrival." Re-appending in the post-addBatch case would
+      // risk duplicates. Accept the loss in this narrow window.
+      const appendBatchCalls: eventWithTime[][] = [];
       const storage = {
         append: async () => undefined,
-        appendBatch: async () => undefined,
-        readAll: async () => [{ key: 1, value: makeEvent(10) }],
-        deleteUpTo: async () => {
-          deleted = true;
+        appendBatch: async (_store: string, events: eventWithTime[]) => {
+          appendBatchCalls.push(events);
         },
+        readAll: async () => [],
+        deleteUpTo: async () => undefined,
         clear: async () => undefined,
+        readAndClear: async () => [{ key: 1, value: makeEvent(10) }],
         close: () => undefined,
       };
       const persistence = new ReplayPersistence({
@@ -278,27 +295,41 @@ describe('ReplayPersistence', () => {
         isAborted: () => aborted,
       };
       await persistence.restore(buffer);
-      expect(deleted).toBe(false);
+      // No re-append attempt — we can't tell if addBatch already
+      // landed the events in a live buffer.
+      expect(appendBatchCalls).toHaveLength(0);
     });
 
-    it('uses deleteUpTo (not clear) when below the RESTORE_LIMIT cap', async () => {
-      // Negative case for the above: under-cap stays on the
-      // race-safe deleteUpTo path so a concurrent pagehide append
-      // survives.
-      let cleared = false;
-      let deleteUpToCalled = false;
+    it('also uses readAndClear for the under-cap case (single atomic primitive for both)', async () => {
+      // Slice 3 collapsed the two paths. Under-cap concurrent
+      // appendBatch is still preserved — via IDB tx serialization
+      // (queued either entirely before or entirely after this
+      // readAndClear), not via the old deleteUpTo(maxKey) keyed-
+      // range delete. Net: a single primitive, simpler restore,
+      // same data-preservation guarantee.
+      let readAndClearCalls = 0;
+      let readAllCalls = 0;
+      let clearCalls = 0;
+      let deleteUpToCalls = 0;
       const underCapStorage = {
         append: async () => undefined,
         appendBatch: async () => undefined,
-        readAll: async () => [
-          { key: 1, value: makeEvent(10) },
-          { key: 2, value: makeEvent(20) },
-        ],
+        readAll: async () => {
+          readAllCalls++;
+          return [];
+        },
         deleteUpTo: async () => {
-          deleteUpToCalled = true;
+          deleteUpToCalls++;
         },
         clear: async () => {
-          cleared = true;
+          clearCalls++;
+        },
+        readAndClear: async () => {
+          readAndClearCalls++;
+          return [
+            { key: 1, value: makeEvent(10) },
+            { key: 2, value: makeEvent(20) },
+          ];
         },
         close: () => undefined,
       };
@@ -307,23 +338,26 @@ describe('ReplayPersistence', () => {
         storage: underCapStorage as unknown as AsyncStorage,
       });
       await persistence.restore(new TestBuffer());
-      expect(deleteUpToCalled).toBe(true);
-      expect(cleared).toBe(false);
+      expect(readAndClearCalls).toBe(1);
+      expect(readAllCalls).toBe(0);
+      expect(deleteUpToCalls).toBe(0);
+      expect(clearCalls).toBe(0);
     });
 
-    it('soft-fails when storage.readAll throws', async () => {
-      // Inject a storage whose readAll throws; restore must not
-      // re-throw — the capture flow proceeds unaffected.
+    it('soft-fails when storage.readAndClear throws', async () => {
+      // Inject a storage whose readAndClear throws; restore must
+      // not re-throw — the capture flow proceeds unaffected.
       const persistence = new ReplayPersistence({
         dbName: 'never-opens',
         storage: {
           append: async () => undefined,
           appendBatch: async () => undefined,
-          readAll: async () => {
-            throw new Error('storage down');
-          },
+          readAll: async () => [],
           deleteUpTo: async () => undefined,
           clear: async () => undefined,
+          readAndClear: async () => {
+            throw new Error('storage down');
+          },
           close: () => undefined,
         },
       });
@@ -386,6 +420,7 @@ describe('ReplayPersistence', () => {
           readAll: async () => [],
           deleteUpTo: async () => undefined,
           clear: async () => undefined,
+          readAndClear: async () => [],
           close: () => undefined,
         },
       });

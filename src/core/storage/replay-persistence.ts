@@ -10,10 +10,12 @@
  *  - `pagehide` listener that flushes the buffer's events on
  *    navigate-away. Bound once per instance; cleaned up via
  *    `destroy()`.
- *  - `restore` reads the prior session's events from IDB, seeds
- *    the buffer, and deletes the consumed records via deleteUpTo
- *    (race-safe alternative to clear() — concurrent appends from
- *    a re-entrant pagehide would survive).
+ *  - `restore` atomically reads up to RESTORE_LIMIT events AND
+ *    clears the IDB store via a single readwrite transaction
+ *    (readAndClear). IDB serializes transactions, so a concurrent
+ *    pagehide flush is queued either entirely before (we read its
+ *    records) or entirely after (its records land in the cleared
+ *    store and are restored next session) — no race window.
  *
  * Soft-fail contract is the whole point: storage failures must
  * NEVER break the capture flow. Every method swallows errors and
@@ -212,67 +214,63 @@ export class ReplayPersistence {
     if (this.hasRestored) return;
     this.hasRestored = true;
 
+    // Atomic read+clear in a single IDB readwrite transaction. The
+    // race the slice 2 readAll → branch → (clear | deleteUpTo) flow
+    // had was the gap between the read and the cleanup: a concurrent
+    // pagehide flush could append records that the cleanup then
+    // wiped (clear path) or that we lost track of (no atomic guard).
+    // IDB serializes transactions, so any concurrent appendBatch is
+    // queued either entirely BEFORE us (we read its records) or
+    // entirely AFTER (its records land in the now-empty store and
+    // are restored next session). Neither path loses data.
     let results: ReadResult<eventWithTime>[];
     try {
-      results = await this.storage.readAll<eventWithTime>(
+      results = await this.storage.readAndClear<eventWithTime>(
         REPLAY_STORE,
         RESTORE_LIMIT
       );
     } catch (err) {
-      logger.warn('ReplayPersistence: restore read failed:', err);
+      logger.warn('ReplayPersistence: restore readAndClear failed:', err);
       return;
     }
     if (results.length === 0) {
       return;
     }
-    // Cancellation check before addBatch + delete. If the owner
-    // (collector session) was destroyed or replaced while we were
-    // awaiting readAll, we must NOT delete records the owner never
-    // received. Returning early preserves them for the next live
-    // restore. See PersistableBuffer.isAborted.
+    // Cancellation check before addBatch. If the owner (collector
+    // session) was destroyed or replaced while we were awaiting
+    // readAndClear, the records are in memory but IDB was already
+    // wiped by the atomic op. Re-append them so the next live
+    // restore can pick them up — preserves the slice 2 round 4
+    // "destroy-during-restore preserves records" contract under
+    // the new atomic primitive.
     if (buffer.isAborted?.()) {
+      try {
+        await this.storage.appendBatch(
+          REPLAY_STORE,
+          results.map((r) => r.value)
+        );
+      } catch (err) {
+        logger.warn(
+          'ReplayPersistence: restore re-append on abort failed:',
+          err
+        );
+      }
       return;
     }
     try {
       buffer.addBatch(results.map((r) => r.value));
     } catch (err) {
-      // CircularBuffer.addBatch shouldn't throw, but if it does
-      // we still want to clean up storage so the next session
-      // doesn't replay the same events.
+      // CircularBuffer.addBatch shouldn't throw; if it does the
+      // records are already gone from IDB (readAndClear was
+      // atomic), so there's nothing to clean up — just log.
       logger.warn('ReplayPersistence: addBatch threw:', err);
     }
-    // Second cancellation check: addBatch may have synchronously
-    // unwound the owner (e.g. an error handler that destroys the
-    // SDK). Skip delete in that case too.
-    if (buffer.isAborted?.()) {
-      return;
-    }
-    if (results.length >= RESTORE_LIMIT) {
-      // We hit the cap. readAll is FIFO, so records past the limit
-      // (newer than maxKey) are still in IDB. deleteUpTo(maxKey)
-      // would leave them dangling — they'd be restored in a future
-      // session, fused into a different timeline. Clear the whole
-      // store instead. Trade-off: a pagehide flush that ran
-      // concurrently with this readAll loses its newly-appended
-      // records. That's worse than nothing but better than
-      // cross-session timeline corruption.
-      try {
-        await this.storage.clear(REPLAY_STORE);
-      } catch (err) {
-        logger.warn('ReplayPersistence: restore clear-on-cap failed:', err);
-      }
-      return;
-    }
-    // deleteUpTo (not clear) so a pagehide flush that fired
-    // CONCURRENTLY with this restore — appending new records
-    // after our readAll — survives. The new records have keys
-    // > maxKey (our highest read key) and stay in storage.
-    const maxKey = results[results.length - 1].key;
-    try {
-      await this.storage.deleteUpTo(REPLAY_STORE, maxKey);
-    } catch (err) {
-      logger.warn('ReplayPersistence: restore deleteUpTo failed:', err);
-    }
+    // Note: no post-addBatch isAborted re-check. Under slice 2's
+    // two-step flow it gated `deleteUpTo`; under readAndClear the
+    // delete already happened. The narrow case where addBatch
+    // SYNCHRONOUSLY triggers owner teardown is accepted as best-
+    // effort loss (re-appending here would risk duplicates if
+    // addBatch had actually landed in a live buffer first).
   }
 
   /**

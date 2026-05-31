@@ -179,6 +179,101 @@ describe('IndexedDbStorage', () => {
     });
   });
 
+  describe('readAndClear', () => {
+    it('reads records AND empties the store in a single readwrite tx', async () => {
+      await storage.appendBatch(REPLAY_STORE, [{ i: 1 }, { i: 2 }, { i: 3 }]);
+      const results = await storage.readAndClear<{ i: number }>(REPLAY_STORE);
+      expect(results.map((r) => r.value.i)).toEqual([1, 2, 3]);
+      // Store is empty afterward — the whole point.
+      const after = await storage.readAll(REPLAY_STORE);
+      expect(after).toHaveLength(0);
+    });
+
+    it('with limit hit, returns first N records AND clears EVERYTHING (incl. past-the-limit)', async () => {
+      // The cap-hit semantic: dangling records past the limit
+      // would corrupt future sessions, so they MUST go.
+      await storage.appendBatch(
+        REPLAY_STORE,
+        Array.from({ length: 10 }, (_, i) => ({ i }))
+      );
+      const results = await storage.readAndClear<{ i: number }>(
+        REPLAY_STORE,
+        3
+      );
+      expect(results).toHaveLength(3);
+      expect(results.map((r) => r.value.i)).toEqual([0, 1, 2]);
+      // Records past the limit are also cleared.
+      const after = await storage.readAll(REPLAY_STORE);
+      expect(after).toHaveLength(0);
+    });
+
+    it('returns [] when store is already empty (still a no-op clear)', async () => {
+      const results = await storage.readAndClear(REPLAY_STORE);
+      expect(results).toEqual([]);
+      const after = await storage.readAll(REPLAY_STORE);
+      expect(after).toHaveLength(0);
+    });
+
+    it('limit=0 short-circuits but still clears the store', async () => {
+      // Edge case symmetric with readAll. The atomic-ness doesn't
+      // apply at zero limit (nothing to coordinate), but the
+      // contract still asks us to clear.
+      await storage.appendBatch(REPLAY_STORE, [{ i: 1 }, { i: 2 }]);
+      const results = await storage.readAndClear(REPLAY_STORE, 0);
+      expect(results).toEqual([]);
+      const after = await storage.readAll(REPLAY_STORE);
+      // Store IS cleared even though we read nothing.
+      expect(after).toHaveLength(0);
+    });
+
+    it('atomic ordering: concurrent appendBatch is either fully before or fully after — no data loss', async () => {
+      // The slice 2 race that motivated this primitive. fake-
+      // indexeddb is spec-compliant on transaction serialization:
+      // both ops open readwrite txs on the same store, so they
+      // queue.
+      await storage.appendBatch(
+        REPLAY_STORE,
+        Array.from({ length: 5 }, (_, i) => ({ phase: 'before', i }))
+      );
+
+      // Fire both at the same microtask tick. The one whose tx is
+      // requested first wins the queue.
+      const readPromise = storage.readAndClear<{ phase: string; i: number }>(
+        REPLAY_STORE
+      );
+      const writePromise = storage.appendBatch(REPLAY_STORE, [
+        { phase: 'concurrent', i: 100 },
+        { phase: 'concurrent', i: 101 },
+      ]);
+      const [results] = await Promise.all([readPromise, writePromise]);
+
+      // Final state probe.
+      const after = await storage.readAll<{ phase: string; i: number }>(
+        REPLAY_STORE
+      );
+
+      // The atomic invariant: NO records lost. The 5 pre-existing
+      // 'before' records are either in `results` (read first) or
+      // in `after` (the read ran first, then the append landed in
+      // the cleared store). Same for the 2 'concurrent' records.
+      const allTouched = [
+        ...results.map((r) => r.value),
+        ...after.map((r) => r.value),
+      ];
+      // 5 'before' records accounted for.
+      expect(allTouched.filter((v) => v.phase === 'before')).toHaveLength(5);
+      // 2 'concurrent' records accounted for.
+      expect(allTouched.filter((v) => v.phase === 'concurrent')).toHaveLength(
+        2
+      );
+    });
+
+    it('soft-fails to [] on a non-existent store name', async () => {
+      const results = await storage.readAndClear('nonexistent-store' as never);
+      expect(results).toEqual([]);
+    });
+  });
+
   describe('persistence across instances (same dbName)', () => {
     it('reads what a prior instance wrote', async () => {
       const dbName = `bugspotter-shared-${++dbCounter}`;

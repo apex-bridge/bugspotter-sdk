@@ -79,6 +79,7 @@ export class ReplayPersistence {
   private readonly storage: AsyncStorage;
   private pagehideHandler: ((event: PageTransitionEvent) => void) | null = null;
   private pageshowHandler: ((event: PageTransitionEvent) => void) | null = null;
+  private visibilityChangeHandler: (() => void) | null = null;
   private boundBuffer: PersistableBuffer | null = null;
   // Tracks whether we've ever attached the lifecycle listeners.
   // We bind once per instance — repeated `bind` calls are no-ops.
@@ -90,6 +91,21 @@ export class ReplayPersistence {
   // doubling them in the buffer. Set synchronously at restore
   // entry — any subsequent call short-circuits before its readAll.
   private hasRestored = false;
+  // Flush dedup watermark. Only events with timestamp > this value
+  // are written on the next flush. Prevents visibilitychange +
+  // pagehide firing in sequence (normal desktop nav) from writing
+  // the buffer twice, which would produce duplicate events on the
+  // next restore. Reset to 0 on bfcache clear (memory buffer is
+  // authoritative there, IDB is wiped) and on destroy().
+  private lastFlushedTimestamp = 0;
+  // Serialization guard: visibilitychange and pagehide can fire in
+  // quick succession, kicking off two concurrent flush() calls. Both
+  // read the buffer + same watermark before either appendBatch
+  // resolves — without this flag they'd both write the same delta,
+  // landing duplicates in IDB. A re-entrant flush during in-flight
+  // is dropped; the buffer state at the second trigger is rarely
+  // meaningfully newer than at the first.
+  private flushInFlight = false;
 
   constructor(options: ReplayPersistenceOptions) {
     this.storage =
@@ -133,10 +149,35 @@ export class ReplayPersistence {
       void this.storage.clear(REPLAY_STORE).catch((err) => {
         logger.warn('ReplayPersistence: bfcache clear failed:', err);
       });
+      // IDB just got wiped but the in-memory buffer is intact. Reset
+      // the watermark so the next pagehide flush re-writes the
+      // buffer's events — otherwise their timestamps would be below
+      // the watermark and silently skipped, leaving IDB empty for
+      // the next restore.
+      this.lastFlushedTimestamp = 0;
+    };
+    // Mobile reliability: on iOS Safari the OS can kill backgrounded
+    // tabs WITHOUT firing pagehide. visibilitychange fires earlier
+    // (when the tab transitions to hidden), giving IDB the largest
+    // possible window to complete the async write. On normal desktop
+    // navigation both fire (visibility first, then pagehide); the
+    // lastFlushedTimestamp watermark prevents the second flush from
+    // duplicating what the first already wrote.
+    this.visibilityChangeHandler = () => {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'hidden') {
+        void this.flush();
+      }
     };
     try {
       window.addEventListener('pagehide', this.pagehideHandler);
       window.addEventListener('pageshow', this.pageshowHandler);
+      if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener(
+          'visibilitychange',
+          this.visibilityChangeHandler
+        );
+      }
       this.listenerAttached = true;
     } catch (err) {
       logger.warn('ReplayPersistence: lifecycle bind failed:', err);
@@ -227,20 +268,52 @@ export class ReplayPersistence {
     if (!this.boundBuffer) {
       return;
     }
-    let events: eventWithTime[];
-    try {
-      events = this.boundBuffer.getEvents();
-    } catch (err) {
-      logger.warn('ReplayPersistence: flush read-from-buffer failed:', err);
+    // Drop re-entrant flushes. visibilitychange + pagehide can fire
+    // microseconds apart; without this, both observe the same
+    // watermark and the same buffer, producing two appendBatch
+    // calls with the same delta — duplicates on next restore.
+    if (this.flushInFlight) {
       return;
     }
-    if (events.length === 0) {
-      return;
-    }
+    this.flushInFlight = true;
     try {
-      await this.storage.appendBatch(REPLAY_STORE, events);
-    } catch (err) {
-      logger.warn('ReplayPersistence: flush appendBatch failed:', err);
+      let events: eventWithTime[];
+      try {
+        events = this.boundBuffer.getEvents();
+      } catch (err) {
+        logger.warn('ReplayPersistence: flush read-from-buffer failed:', err);
+        return;
+      }
+      if (events.length === 0) {
+        return;
+      }
+      // Dedup: only events strictly newer than the last successful
+      // flush. rrweb's timestamps are monotonic in practice but not
+      // guaranteed in all orderings, so we use `>` (not `>=`) and
+      // recompute the watermark via max() rather than trusting the
+      // last array element.
+      const cutoff = this.lastFlushedTimestamp;
+      const fresh =
+        cutoff === 0 ? events : events.filter((e) => e.timestamp > cutoff);
+      if (fresh.length === 0) {
+        return;
+      }
+      try {
+        await this.storage.appendBatch(REPLAY_STORE, fresh);
+        // Only advance the watermark on successful write. On failure
+        // the next flush retries the same delta (acceptable: storage
+        // is best-effort, and a partial write rolling back is also
+        // OK — we'd re-append on the next try).
+        let maxTs = cutoff;
+        for (const e of fresh) {
+          if (e.timestamp > maxTs) maxTs = e.timestamp;
+        }
+        this.lastFlushedTimestamp = maxTs;
+      } catch (err) {
+        logger.warn('ReplayPersistence: flush appendBatch failed:', err);
+      }
+    } finally {
+      this.flushInFlight = false;
     }
   }
 
@@ -261,14 +334,30 @@ export class ReplayPersistence {
         logger.warn('ReplayPersistence: lifecycle unbind failed:', err);
       }
     }
+    if (typeof document !== 'undefined' && document.removeEventListener) {
+      try {
+        if (this.visibilityChangeHandler) {
+          document.removeEventListener(
+            'visibilitychange',
+            this.visibilityChangeHandler
+          );
+        }
+      } catch (err) {
+        logger.warn('ReplayPersistence: visibility unbind failed:', err);
+      }
+    }
     this.pagehideHandler = null;
     this.pageshowHandler = null;
+    this.visibilityChangeHandler = null;
     this.listenerAttached = false;
     this.boundBuffer = null;
     // Reset the idempotency flag so a host that re-uses this
     // persistence instance with a new collector (uncommon but
     // possible if exported) can still restore.
     this.hasRestored = false;
+    // Reset the flush watermark too — a re-used instance must not
+    // skip writes because of a stale prior session's threshold.
+    this.lastFlushedTimestamp = 0;
     this.storage.close();
   }
 }

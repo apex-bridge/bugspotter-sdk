@@ -439,12 +439,15 @@ describe('ReplayPersistence', () => {
         dbName: 'retry-test',
         storage: {
           append: async () => undefined,
-          appendBatch: async (_store, events) => {
+          appendBatch: async (
+            _store: string,
+            events: eventWithTime[]
+          ): Promise<void> => {
             appendCalls++;
             if (appendCalls === 1) throw new Error('first call fails');
             // Second call succeeds; capture for assertion below.
             (flaky as unknown as { _written: eventWithTime[] })._written =
-              events as eventWithTime[];
+              events;
           },
           readAll: async () => [],
           deleteUpTo: async () => undefined,

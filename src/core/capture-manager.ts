@@ -9,9 +9,13 @@ import { ConsoleCapture } from '../capture/console';
 import { NetworkCapture } from '../capture/network';
 import { MetadataCapture } from '../capture/metadata';
 import { DOMCollector } from '../collectors/dom';
+import { ReplayPersistence } from './storage/replay-persistence';
 import type { Sanitizer } from '../utils/sanitize';
+import { getLogger } from '../utils/logger';
 
 import { DEFAULT_REPLAY_DURATION_SECONDS } from '../constants';
+
+const logger = getLogger();
 
 /**
  * Configuration for capture manager
@@ -33,6 +37,19 @@ export interface CaptureManagerConfig {
     recordCrossOriginIframes?: boolean;
     blockSelectors?: string[];
     blockClass?: string;
+    /**
+     * Opt-in: persist rrweb events to IndexedDB on pagehide and
+     * restore them on init. Lets a bug reported AFTER a page
+     * reload still include pre-reload activity. Default off.
+     */
+    persistAcrossNavigation?: boolean;
+    /**
+     * IndexedDB database name used by the persistence layer.
+     * REQUIRED when `persistAcrossNavigation` is true — pick a
+     * stable identifier (apiKey prefix, endpoint hash, tenant id)
+     * so multi-tenant SPAs on the same origin don't share storage.
+     */
+    dbName?: string;
   };
 }
 
@@ -46,6 +63,7 @@ export class CaptureManager {
   private network: NetworkCapture;
   private metadata: MetadataCapture;
   private domCollector?: DOMCollector;
+  private replayPersistence?: ReplayPersistence;
 
   constructor(config: CaptureManagerConfig) {
     // Initialize core capture modules
@@ -70,6 +88,32 @@ export class CaptureManager {
     // Initialize optional replay/DOM collector
     const replayEnabled = config.replay?.enabled ?? true;
     if (replayEnabled) {
+      // Cross-navigation persistence is opt-in. We refuse to enable
+      // it without a dbName because the IDB primitive (slice 1)
+      // rejects empty names and a default would mix tenants on a
+      // shared origin. Better to log + skip than misfire silently.
+      if (config.replay?.persistAcrossNavigation) {
+        const dbName = this.deriveTabScopedDbName(config.replay?.dbName);
+        if (dbName) {
+          try {
+            this.replayPersistence = new ReplayPersistence({ dbName });
+          } catch (err) {
+            // Constructor shouldn't throw, but soft-fail if it
+            // ever does — replay capture proceeds without
+            // persistence.
+            this.replayPersistence = undefined;
+            logger.warn('Replay persistence init failed:', err);
+          }
+        } else {
+          // The host opted in but didn't provide dbName. Surface
+          // this loudly — otherwise they'd assume replay persists
+          // across navigations and silently get nothing.
+          logger.warn(
+            'persistAcrossNavigation enabled but dbName not set; cross-navigation replay will not persist'
+          );
+        }
+      }
+
       this.domCollector = new DOMCollector({
         duration: config.replay?.duration ?? DEFAULT_REPLAY_DURATION_SECONDS,
         sampling: config.replay?.sampling,
@@ -81,8 +125,49 @@ export class CaptureManager {
         blockSelectors: config.replay?.blockSelectors,
         blockClass: config.replay?.blockClass,
         sanitizer: config.sanitizer,
+        persistence: this.replayPersistence,
       });
       this.domCollector.startRecording();
+    }
+  }
+
+  /**
+   * Postfix the host-supplied dbName with a per-tab id so two tabs
+   * of the same SPA don't share the IDB store. Without this, Tab A's
+   * pagehide flush ends up in Tab B's restore, with both tabs racing
+   * to drain the same shared store on init — yielding interleaved
+   * timelines and one tab's restore silently destroying another's
+   * data.
+   *
+   * sessionStorage is the natural fit: per-tab AND survives reload
+   * within that tab (so restore-after-reload still finds the prior
+   * session's events). Returns undefined when sessionStorage is
+   * unavailable (SSR, private browsing with storage blocked) — the
+   * caller's missing-dbName warning path handles that.
+   */
+  private deriveTabScopedDbName(base: string | undefined): string | undefined {
+    if (!base) return undefined;
+    if (typeof window === 'undefined') return base;
+    // The sessionStorage property GETTER itself can throw a
+    // SecurityError on Safari ITP / Firefox with cookies blocked /
+    // private browsing — the access has to live inside try/catch.
+    try {
+      if (!window.sessionStorage) return base;
+      const KEY = '__bugspotter_tab_id__';
+      let tabId = window.sessionStorage.getItem(KEY);
+      if (!tabId) {
+        // padEnd guarantees the 8-char length even on the rare
+        // Math.random() values whose base-36 string is shorter
+        // (e.g. 0.5 → "0.i"). The test regex pins exact length.
+        tabId = Math.random().toString(36).slice(2, 10).padEnd(8, '0');
+        window.sessionStorage.setItem(KEY, tabId);
+      }
+      return `${base}-${tabId}`;
+    } catch {
+      // Storage access threw (cookies/storage blocked). Fall back
+      // to the bare dbName — tabs WILL share, but the alternative
+      // is no persistence at all.
+      return base;
     }
   }
 

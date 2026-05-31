@@ -79,6 +79,7 @@ export default [
         IDBRequest: 'readonly',
         IDBKeyRange: 'readonly',
         DOMException: 'readonly',
+        PageTransitionEvent: 'readonly',
         queueMicrotask: 'readonly',
       },
     },

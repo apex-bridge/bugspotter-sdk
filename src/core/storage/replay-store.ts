@@ -574,6 +574,12 @@ export class IndexedDbStorage implements AsyncStorage {
         } catch {
           // already aborted/finished
         }
+        // Settle unconditionally (matches the onsuccess catch
+        // pattern): defends against tx.abort throwing AND
+        // onabort/onerror never firing, which would otherwise
+        // hang the Promise. The `settled` flag dedupes a later
+        // onabort.
+        settle([]);
       };
       // tx.oncomplete fires AFTER clear's pending request resolves,
       // so by the time we settle the read results are valid AND the

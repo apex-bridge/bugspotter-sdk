@@ -558,10 +558,22 @@ export class IndexedDbStorage implements AsyncStorage {
           );
         }
         event.preventDefault();
-        // Don't settle here — IDB auto-aborts the tx on a request
-        // error, and tx.onabort will fire and settle([]). Settling
-        // twice is a no-op via the flag, but the flow is cleaner if
-        // the tx-level handlers own all settle paths.
+        // preventDefault suppresses host-monitoring noise AND
+        // suppresses the IDB auto-abort. Without an explicit abort
+        // here, the tx becomes inactive (no pending requests after
+        // the cursor errored) and auto-commits as a no-op (clear()
+        // wasn't reached). tx.oncomplete would then fire and settle
+        // with the PARTIAL cursor results — which is worse than [].
+        // Those partial results flow into ReplayPersistence.restore's
+        // addBatch while IDB still has every record, double-
+        // restoring on the next session. Explicit abort fires
+        // tx.onabort → settle([]) → caller sees no results, IDB
+        // unchanged.
+        try {
+          tx.abort();
+        } catch {
+          // already aborted/finished
+        }
       };
       // tx.oncomplete fires AFTER clear's pending request resolves,
       // so by the time we settle the read results are valid AND the

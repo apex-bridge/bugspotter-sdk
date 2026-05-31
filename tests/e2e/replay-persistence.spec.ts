@@ -26,6 +26,16 @@ const FIXTURE_URL =
     .join(process.cwd(), 'tests/fixtures/replay-persistence-page.html')
     .replace(/\\/g, '/');
 
+// Separate fixture used as the "navigate away" target in the bfcache
+// test. about:blank as the target races Playwright's own internal
+// navigation on Firefox + Webkit, producing "Navigation interrupted"
+// errors — a real file:// URL is unambiguous.
+const FIXTURE_OTHER_URL =
+  'file://' +
+  path
+    .join(process.cwd(), 'tests/fixtures/replay-persistence-other.html')
+    .replace(/\\/g, '/');
+
 /** Navigate to the fixture page + inject the built SDK bundle. */
 async function loadFixtureAndSdk(page: Page): Promise<void> {
   await page.goto(FIXTURE_URL);
@@ -328,9 +338,11 @@ test.describe('Replay Persistence — Real Browser', () => {
     const initialCount = await readReplayCount(page, dbName);
     expect(initialCount).toBeGreaterThan(0);
 
-    // Navigate to a different page (real navigation, triggers
-    // real pagehide).
-    await page.goto('about:blank');
+    // Navigate to a different fixture (real navigation, triggers
+    // real pagehide). Using a file:// URL rather than about:blank
+    // because Firefox + Webkit can race Playwright's own internal
+    // navigation on about:blank, producing "interrupted" errors.
+    await page.goto(FIXTURE_OTHER_URL);
     await page.waitForTimeout(100);
 
     // Navigate back. If bfcache activated, page is restored from

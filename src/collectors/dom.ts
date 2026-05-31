@@ -156,7 +156,18 @@ export class DOMCollector {
           if (this.emitQueue === currentQueue) {
             this.emitQueue = null;
             if (currentQueue.length > 0) {
-              ownBuffer.addBatch(currentQueue);
+              // Symmetric with ReplayPersistence.restore's addBatch
+              // try/catch. Without this, a CircularBuffer.addBatch
+              // throw inside .finally becomes an unhandledRejection
+              // (the chain is wrapped in `void`).
+              try {
+                ownBuffer.addBatch(currentQueue);
+              } catch (err) {
+                getLogger().warn(
+                  'DOMCollector: error draining emitQueue:',
+                  err
+                );
+              }
             }
           }
         });

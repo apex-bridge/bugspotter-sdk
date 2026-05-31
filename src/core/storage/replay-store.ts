@@ -95,6 +95,25 @@ export interface AsyncStorage {
   deleteUpTo(store: StorageStore, maxKey: number): Promise<void>;
   /** Drop everything in the store. */
   clear(store: StorageStore): Promise<void>;
+  /**
+   * Atomically read up to `limit` records (FIFO) AND clear the entire
+   * store within a single readwrite transaction. The atomic guarantee
+   * matters when accumulation past the read limit is unacceptable —
+   * any concurrent append transaction is queued by IDB to run either
+   * entirely before this one (its records are read) or entirely after
+   * (its records land in a now-empty store). Neither path loses data,
+   * unlike the `readAll → clear` two-step where an append between the
+   * two operations would be wiped.
+   *
+   * Use this when the consumer is OK discarding records past the
+   * limit — e.g. the cap-hit branch of a cross-session restore where
+   * leftover records would otherwise corrupt the next session's
+   * timeline.
+   */
+  readAndClear<T>(
+    store: StorageStore,
+    limit?: number
+  ): Promise<ReadResult<T>[]>;
   /** Close any underlying connection. */
   close(): void;
 }
@@ -412,6 +431,165 @@ export class IndexedDbStorage implements AsyncStorage {
     if (!db) return;
     await this.runTransaction(db, store, 'readwrite', (objectStore) => {
       objectStore.clear();
+    });
+  }
+
+  async readAndClear<T>(
+    store: StorageStore,
+    limit?: number
+  ): Promise<ReadResult<T>[]> {
+    // Edge case symmetric with readAll: limit<=0 means "read nothing,"
+    // but the contract still asks us to clear the store. Run clear()
+    // as a standalone op — there's no read/clear coordination at zero
+    // limit, so atomic-ness doesn't apply.
+    if (limit !== undefined && limit <= 0) {
+      await this.clear(store);
+      return [];
+    }
+    const db = await this.openDb();
+    if (!db) return [];
+    return new Promise<ReadResult<T>[]>((resolve) => {
+      let tx: IDBTransaction;
+      try {
+        tx = db.transaction(store, 'readwrite');
+      } catch (err) {
+        logger.warn(
+          `IndexedDB readAndClear(${store}) tx failed, soft-failing:`,
+          err
+        );
+        this.clearCacheIfInvalidState(db, err);
+        resolve([]);
+        return;
+      }
+      let settled = false;
+      const settle = (result: ReadResult<T>[]) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+
+      const results: ReadResult<T>[] = [];
+      let objectStore: IDBObjectStore;
+      try {
+        objectStore = tx.objectStore(store);
+      } catch (err) {
+        logger.warn(
+          `IndexedDB readAndClear(${store}) objectStore failed:`,
+          err
+        );
+        // Explicitly abort: readwrite txs hold a lock on the store
+        // and serialize subsequent readwrite txs on the same store.
+        // Without abort, the unused tx releases on the next IDB
+        // microtask boundary anyway, but during that gap a queued
+        // appendBatch would block. abort() releases immediately.
+        try {
+          tx.abort();
+        } catch {
+          // already aborted/finished
+        }
+        settle([]);
+        return;
+      }
+
+      let req: IDBRequest;
+      try {
+        req = objectStore.openCursor();
+      } catch (err) {
+        logger.warn(`IndexedDB readAndClear(${store}) openCursor failed:`, err);
+        try {
+          tx.abort();
+        } catch {
+          // already aborted/finished
+        }
+        settle([]);
+        return;
+      }
+      req.onsuccess = () => {
+        // Same DataCloneError guard as readAll: cursor.value is a
+        // getter that performs structured-clone deserialization on
+        // each access. Abort the tx on read failure so the store
+        // is NOT cleared — preserving records for the next attempt
+        // rather than discarding a partial batch.
+        try {
+          const cursor = req.result;
+          if (cursor) {
+            results.push({
+              key: cursor.key as number,
+              value: cursor.value as T,
+            });
+            if (limit === undefined || results.length < limit) {
+              cursor.continue();
+              return;
+            }
+          }
+          // Cursor done — either naturally exhausted (cursor=null)
+          // or the limit was just reached. Clear the store within
+          // THIS same readwrite tx IF we read any records — empty-
+          // store case is a no-op at the data level but still pays
+          // the IDB request roundtrip. IDB serializes transactions,
+          // so any concurrent appendBatch will run either before us
+          // (we already read it) or after (lands in the cleared
+          // store) — neither path loses data.
+          if (results.length > 0) {
+            objectStore.clear();
+          }
+        } catch (err) {
+          logger.warn(
+            `IndexedDB readAndClear(${store}) cursor read failed:`,
+            err
+          );
+          try {
+            tx.abort();
+          } catch {
+            // already aborted/finished — fine
+          }
+          // Settle unconditionally (matches runTransaction's pattern):
+          // if tx.abort itself throws AND onabort/onerror never fire,
+          // the Promise would otherwise hang. The `settled` flag
+          // dedupes any later onabort.
+          settle([]);
+        }
+      };
+      req.onerror = (event) => {
+        if (!settled) {
+          logger.warn(
+            `IndexedDB readAndClear(${store}) request failed:`,
+            req.error
+          );
+        }
+        event.preventDefault();
+        // preventDefault suppresses host-monitoring noise AND
+        // suppresses the IDB auto-abort. Without an explicit abort
+        // here, the tx becomes inactive (no pending requests after
+        // the cursor errored) and auto-commits as a no-op (clear()
+        // wasn't reached). tx.oncomplete would then fire and settle
+        // with the PARTIAL cursor results — which is worse than [].
+        // Those partial results flow into ReplayPersistence.restore's
+        // addBatch while IDB still has every record, double-
+        // restoring on the next session. Explicit abort fires
+        // tx.onabort → settle([]) → caller sees no results, IDB
+        // unchanged.
+        try {
+          tx.abort();
+        } catch {
+          // already aborted/finished
+        }
+        // Settle unconditionally (matches the onsuccess catch
+        // pattern): defends against tx.abort throwing AND
+        // onabort/onerror never firing, which would otherwise
+        // hang the Promise. The `settled` flag dedupes a later
+        // onabort.
+        settle([]);
+      };
+      // tx.oncomplete fires AFTER clear's pending request resolves,
+      // so by the time we settle the read results are valid AND the
+      // store is empty. This is the atomic guarantee callers buy.
+      tx.oncomplete = () => settle(results);
+      tx.onabort = () => settle([]);
+      tx.onerror = (event) => {
+        event.preventDefault();
+        settle([]);
+      };
     });
   }
 

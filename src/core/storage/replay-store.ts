@@ -477,6 +477,16 @@ export class IndexedDbStorage implements AsyncStorage {
           `IndexedDB readAndClear(${store}) objectStore failed:`,
           err
         );
+        // Explicitly abort: readwrite txs hold a lock on the store
+        // and serialize subsequent readwrite txs on the same store.
+        // Without abort, the unused tx releases on the next IDB
+        // microtask boundary anyway, but during that gap a queued
+        // appendBatch would block. abort() releases immediately.
+        try {
+          tx.abort();
+        } catch {
+          // already aborted/finished
+        }
         settle([]);
         return;
       }
@@ -486,6 +496,11 @@ export class IndexedDbStorage implements AsyncStorage {
         req = objectStore.openCursor();
       } catch (err) {
         logger.warn(`IndexedDB readAndClear(${store}) openCursor failed:`, err);
+        try {
+          tx.abort();
+        } catch {
+          // already aborted/finished
+        }
         settle([]);
         return;
       }

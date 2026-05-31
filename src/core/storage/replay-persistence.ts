@@ -76,7 +76,7 @@ export interface PersistableBuffer {
 }
 
 export class ReplayPersistence {
-  private storage: AsyncStorage;
+  private readonly storage: AsyncStorage;
   private pagehideHandler: ((event: PageTransitionEvent) => void) | null = null;
   private pageshowHandler: ((event: PageTransitionEvent) => void) | null = null;
   private boundBuffer: PersistableBuffer | null = null;

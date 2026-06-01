@@ -122,6 +122,35 @@ async function waitForReplayCount(
   return last;
 }
 
+/**
+ * Poll the SDK's in-memory rrweb buffer until at least `minCount`
+ * events are present, or the timeout expires. Replaces fixed
+ * post-click `waitForTimeout` for "give rrweb a tick to emit" —
+ * polls the buffer length directly, no flake risk on slow CI.
+ * Returns the final count whether or not the condition was met.
+ */
+async function waitForBufferEvents(
+  page: Page,
+  minCount: number,
+  timeoutMs = 2000
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  let last = -1;
+  while (Date.now() < deadline) {
+    try {
+      last = await page.evaluate(() => {
+        const inst = (window as any).BugSpotter.getInstance();
+        return inst?.captureManager?.domCollector?.getEvents?.().length ?? 0;
+      });
+      if (last >= minCount) return last;
+    } catch {
+      // Page context unavailable mid-navigation; retry next tick.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return last;
+}
+
 /** Probe the IDB store for record count, or -1 on any failure. */
 async function readReplayCount(page: Page, dbName: string): Promise<number> {
   return page.evaluate((db) => {
@@ -215,12 +244,12 @@ test.describe('Replay Persistence — Real Browser', () => {
     await loadFixtureAndSdk(page);
     const dbName = await initWithPersistence(page, 'e2e-reload');
 
-    // Generate replay events the rrweb recorder will buffer. The
-    // small post-click wait is just to give rrweb a tick to emit
-    // synchronously into the buffer — no IDB state yet to poll for.
+    // Generate replay events the rrweb recorder will buffer. Poll
+    // the in-memory buffer until both clicks have landed — no fixed
+    // sleep, won't flake on slow CI.
     await page.click('#btn-a');
     await page.click('#btn-b');
-    await page.waitForTimeout(150);
+    await waitForBufferEvents(page, 2);
 
     // Trigger pagehide-equivalent flush via visibilitychange (more
     // deterministic than page.reload's pagehide which can race the
@@ -291,7 +320,7 @@ test.describe('Replay Persistence — Real Browser', () => {
     // both IDB stores.
     await page1.click('#btn-a');
     await page1.click('#btn-b');
-    await page1.waitForTimeout(150);
+    await waitForBufferEvents(page1, 2);
     await dispatchVisibilityChange(page1, 'hidden');
 
     // Tab 1's count polls until the flush lands. Tab 2's count is a
@@ -315,7 +344,7 @@ test.describe('Replay Persistence — Real Browser', () => {
 
     await page.click('#btn-a');
     await page.click('#btn-b');
-    await page.waitForTimeout(150);
+    await waitForBufferEvents(page, 2);
 
     // Negative case first: visibilityState='visible' must NOT flush.
     // Negative-assert with a single read after a small settle delay;
@@ -365,7 +394,7 @@ test.describe('Replay Persistence — Real Browser', () => {
     });
 
     await page.click('#btn-a');
-    await page.waitForTimeout(150);
+    await waitForBufferEvents(page, 1);
     await dispatchVisibilityChange(page, 'hidden');
     await page.waitForTimeout(200);
 
@@ -410,7 +439,7 @@ test.describe('Replay Persistence — Real Browser', () => {
     const dbName = await initWithPersistence(page, 'e2e-bfcache');
 
     await page.click('#btn-a');
-    await page.waitForTimeout(150);
+    await waitForBufferEvents(page, 1);
     await dispatchVisibilityChange(page, 'hidden');
     const initialCount = await waitForReplayCount(page, dbName, 1);
     expect(initialCount).toBeGreaterThan(0);
@@ -444,8 +473,16 @@ test.describe('Replay Persistence — Real Browser', () => {
     // vs cold-reload (dip to 0 via readAndClear, then back up) — no
     // single polling target captures "the flush has settled" for
     // both paths.
+    // Wait for the NEW click to land relative to pre-click state —
+    // bfcache-hit means buffer already has many events, so polling
+    // for ">= 1" alone would resolve instantly without actually
+    // waiting for btn-b. Snapshot before, poll for the delta.
+    const preClickCount = await page.evaluate(() => {
+      const inst = (window as any).BugSpotter.getInstance();
+      return inst?.captureManager?.domCollector?.getEvents?.().length ?? 0;
+    });
     await page.click('#btn-b');
-    await page.waitForTimeout(150);
+    await waitForBufferEvents(page, preClickCount + 1);
     await dispatchVisibilityChange(page, 'hidden');
     await page.waitForTimeout(300);
 

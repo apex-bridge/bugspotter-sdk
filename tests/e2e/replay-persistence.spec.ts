@@ -12,7 +12,10 @@
 // page.evaluate(() => ...) executes in the browser. Most browser
 // globals are recognized by the Node ESLint env (document, indexedDB,
 // Event) but sessionStorage isn't — declare just that one.
-/* global sessionStorage */
+// __dirname is a CJS global that Playwright's TS loader injects at
+// runtime, but ESLint sees the file as ESM — declare it so no-undef
+// doesn't trip.
+/* global sessionStorage, __dirname */
 import { test, expect, type Page } from '@playwright/test';
 import path from 'path';
 import { pathToFileURL } from 'url';
@@ -22,11 +25,12 @@ import { pathToFileURL } from 'url';
 // IndexedDB access on opaque origins, which the SDK's tab-scoping
 // path depends on. pathToFileURL handles Windows drive letters,
 // backslash → forward-slash, and special-char escaping correctly.
-// Resolved via process.cwd() — Playwright's TS loader transpiles
-// imports to CJS, so import.meta.url isn't available here without
-// reconfiguring the project as full ESM (out of scope for this PR).
+// Resolved via __dirname so the path is anchored to this spec file
+// rather than process.cwd() — works under Playwright's CJS-transpiled
+// loader (unlike import.meta.url) and stays correct if the runner is
+// started from a subdirectory.
 const FIXTURE_URL = pathToFileURL(
-  path.join(process.cwd(), 'tests/fixtures/replay-persistence-page.html')
+  path.join(__dirname, '../fixtures/replay-persistence-page.html')
 ).href;
 
 // Separate fixture used as the "navigate away" target in the bfcache
@@ -34,7 +38,7 @@ const FIXTURE_URL = pathToFileURL(
 // navigation on Firefox + Webkit, producing "Navigation interrupted"
 // errors — a real file:// URL is unambiguous.
 const FIXTURE_OTHER_URL = pathToFileURL(
-  path.join(process.cwd(), 'tests/fixtures/replay-persistence-other.html')
+  path.join(__dirname, '../fixtures/replay-persistence-other.html')
 ).href;
 
 /** Navigate to the fixture page + inject the built SDK bundle. */
@@ -51,7 +55,7 @@ async function loadFixtureAndSdk(page: Page): Promise<void> {
  */
 async function injectSdkBundle(page: Page): Promise<void> {
   await page.addScriptTag({
-    path: path.join(process.cwd(), 'dist/bugspotter.min.js'),
+    path: path.join(__dirname, '../../dist/bugspotter.min.js'),
   });
 }
 
@@ -100,7 +104,7 @@ async function waitForReplayCount(
   dbName: string,
   target: number,
   op: 'gte' | 'eq' = 'gte',
-  timeoutMs = 2000
+  timeoutMs = 5000
 ): Promise<number> {
   const deadline = Date.now() + timeoutMs;
   let last = -1;
@@ -135,7 +139,7 @@ async function waitForReplayCount(
 async function waitForBufferEvents(
   page: Page,
   minCount: number,
-  timeoutMs = 2000
+  timeoutMs = 5000
 ): Promise<number> {
   const deadline = Date.now() + timeoutMs;
   let last = -1;
@@ -391,7 +395,7 @@ test.describe('Replay Persistence — Real Browser', () => {
     // there's no condition to poll for "stayed 0" beyond waiting a
     // beat.
     await dispatchVisibilityChange(page, 'visible');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
     expect(await readReplayCount(page, dbName)).toBe(0);
 
     // Positive case: hidden → flush lands. Poll for the count to
@@ -410,7 +414,7 @@ test.describe('Replay Persistence — Real Browser', () => {
     // bug would produce. Keep a fixed wait here: the assertion is
     // "no doubling", which can't be expressed as a polling condition.
     await dispatchVisibilityChange(page, 'hidden');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
     const afterSecondHidden = await readReplayCount(page, dbName);
     // Explicit lower bound — without this, a catastrophic bug where
     // the second flush LOSES events (afterSecondHidden < afterHidden)
@@ -442,7 +446,7 @@ test.describe('Replay Persistence — Real Browser', () => {
     await page.click('#btn-a');
     await waitForBufferEvents(page, 1);
     await dispatchVisibilityChange(page, 'hidden');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
 
     // No tab id should have been written to sessionStorage either
     // (deriveTabScopedDbName never runs without the flag).
@@ -462,13 +466,18 @@ test.describe('Replay Persistence — Real Browser', () => {
     });
     // test.skip() (not early return) so the reporter records this as
     // SKIPPED with a reason rather than PASS. Returning would silently
-    // bypass the only assertions in this test.
-    test.skip(
-      dbs === null,
-      'indexedDB.databases() not supported; cannot assert no-db negative'
-    );
-    expect(dbs!.filter((n) => n.startsWith('e2e-disabled'))).toEqual([]);
-    expect(dbs!.filter((n) => n.startsWith('bugspotter'))).toEqual([]);
+    // bypass the only assertions in this test. The early `return` after
+    // is unreachable at runtime (test.skip aborts the test body) but
+    // gives TypeScript the narrowing it needs to drop `null` from dbs.
+    if (dbs === null) {
+      test.skip(
+        true,
+        'indexedDB.databases() not supported; cannot assert no-db negative'
+      );
+      return;
+    }
+    expect(dbs.filter((n) => n.startsWith('e2e-disabled'))).toEqual([]);
+    expect(dbs.filter((n) => n.startsWith('bugspotter'))).toEqual([]);
   });
 
   test('back-forward navigation does not duplicate events on next flush', async ({

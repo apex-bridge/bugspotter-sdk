@@ -402,6 +402,12 @@ test.describe('Replay Persistence — Real Browser', () => {
     await dispatchVisibilityChange(page, 'hidden');
     await page.waitForTimeout(200);
     const afterSecondHidden = await readReplayCount(page, dbName);
+    // Explicit lower bound — without this, a catastrophic bug where
+    // the second flush LOSES events (afterSecondHidden < afterHidden)
+    // would pass both other assertions silently. The dedup contract
+    // is "no re-write of already-flushed events," which means the
+    // count must never decrease.
+    expect(afterSecondHidden).toBeGreaterThanOrEqual(afterHidden);
     expect(afterSecondHidden).toBeLessThan(afterHidden * 2);
     expect(afterSecondHidden - afterHidden).toBeLessThanOrEqual(5);
   });
@@ -498,11 +504,8 @@ test.describe('Replay Persistence — Real Browser', () => {
 
     // Trigger another flush. The dedup watermark + bfcache pageshow
     // reset (slice 3) should prevent duplication regardless of which
-    // path the browser took. Kept as a fixed wait because the IDB
-    // count trajectory differs across bfcache-hit (monotonic growth)
-    // vs cold-reload (dip to 0 via readAndClear, then back up) — no
-    // single polling target captures "the flush has settled" for
-    // both paths.
+    // path the browser took.
+    //
     // Wait for the NEW click to land relative to pre-click state —
     // bfcache-hit means buffer already has many events, so polling
     // for ">= 1" alone would resolve instantly without actually
@@ -518,7 +521,18 @@ test.describe('Replay Persistence — Real Browser', () => {
     await page.click('#btn-b');
     await waitForBufferEvents(page, preClickCount + 1);
     await dispatchVisibilityChange(page, 'hidden');
-    await page.waitForTimeout(300);
+    // Path-conditional polling target instead of a fixed wait:
+    //   bfcache-hit (sdkAlive=true): IDB still has the initialCount
+    //     records; the new flush adds at least one more, so poll for
+    //     initialCount + 1.
+    //   cold reload (sdkAlive=false): SDK reinit's restore consumed
+    //     IDB to 0; the new flush re-writes restored + new events.
+    //     "At least 1" is a safe lower bound for the resulting state.
+    // The subsequent "< initialCount + 50" assertion is a no-duplication
+    // sanity check that doesn't depend on capturing the count at the
+    // exact "settled" moment, so the lower-bound poll is sufficient.
+    const expectedMinCount = sdkAlive ? initialCount + 1 : 1;
+    await waitForReplayCount(page, dbName, expectedMinCount);
 
     const finalCount = await readReplayCount(page, dbName);
     // We don't pin the exact count (bfcache hit vs cold reload

@@ -215,6 +215,15 @@ async function readReplayCount(page: Page, dbName: string): Promise<number> {
             resolve(-1);
           }
         };
+        // onblocked fires when an upgrade is pending and other
+        // connections hold the DB. Current tests don't trigger this
+        // (single version, no deleteDatabase), but unhandled it would
+        // leave the Promise pending and the test would hang at the
+        // Playwright global timeout. Honor the helper's "-1 on any
+        // failure" contract so the polling loop surfaces it cleanly.
+        req.onblocked = () => {
+          resolve(-1);
+        };
         req.onsuccess = () => {
           const idbDb = req.result;
           if (!idbDb.objectStoreNames.contains('replay-events')) {

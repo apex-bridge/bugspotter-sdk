@@ -42,15 +42,19 @@ reviews:
   # benchmarks. Test code is reviewed but with the path-instruction
   # tweak below so the bot doesn't quibble over `as any` patterns
   # we use to access SDK internals from page.evaluate.
+  #
+  # CodeRabbit's `path_filters` uses gitignore-style semantics: a
+  # bare pattern is an EXCLUDE; a `!`-prefixed pattern re-INCLUDES
+  # (overrides a broader exclude). Use bare patterns here.
   path_filters:
-    - '!dist/**'
-    - '!**/*.min.js'
-    - '!**/*.min.js.map'
-    - '!**/*.d.ts'
-    - '!benchmarks/**'
-    - '!tests/fixtures/**'
-    - '!.github/workflows/cdn-deploy.yml'
-    - '!pnpm-lock.yaml'
+    - 'dist/**'
+    - '**/*.min.js'
+    - '**/*.min.js.map'
+    - '**/*.d.ts'
+    - 'benchmarks/**'
+    - 'tests/fixtures/**'
+    - '.github/workflows/cdn-deploy.yml'
+    - 'pnpm-lock.yaml'
   path_instructions:
     - path: 'src/**/*.ts'
       instructions: |
@@ -77,7 +81,7 @@ reviews:
         Skip stylistic suggestions: comment phrasing, variable naming,
         custom helpers vs library equivalents (we have rationale for
         most custom helpers documented inline).
-    - path: 'tests/**/*.{ts,spec.ts,test.ts}'
+    - path: 'tests/**/*.ts'
       instructions: |
         Tests pattern:
           - `as any` / `as unknown as X` casts at SDK-internal access

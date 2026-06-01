@@ -139,8 +139,15 @@ async function waitForBufferEvents(
   while (Date.now() < deadline) {
     try {
       last = await page.evaluate(() => {
-        const inst = (window as any).BugSpotter.getInstance();
-        return inst?.captureManager?.domCollector?.getEvents?.().length ?? 0;
+        // Bracket-notation with quoted strings — Terser doesn't
+        // mangle these by default. Defensive against future SDK
+        // build configs that enable mangle.properties. A dedicated
+        // public debug API on BugSpotter would be cleaner long-term.
+        const inst = (window as any).BugSpotter['getInstance']();
+        return (
+          inst?.['captureManager']?.['domCollector']?.['getEvents']?.()
+            .length ?? 0
+        );
       });
       if (last >= minCount) return last;
     } catch {
@@ -170,14 +177,26 @@ async function readReplayCount(page: Page, dbName: string): Promise<number> {
         // phantom. (In current tests SDK init happens first and
         // creates the stores; this is defensive against future
         // tests that probe pre-init.)
+        let upgradeAborted = false;
         req.onupgradeneeded = () => {
+          upgradeAborted = true;
           try {
             req.transaction?.abort();
           } catch {
             // already aborted/finished
           }
         };
-        req.onerror = () => resolve(-1);
+        req.onerror = () => {
+          // Abort-triggered errors mean "DB didn't exist" → 0 is
+          // the correct count, not -1 (generic failure). Without
+          // this distinction a probe waiting for a `toBe(0)`
+          // assertion against a pre-init dbName would time out.
+          if (upgradeAborted || req.error?.name === 'AbortError') {
+            resolve(0);
+          } else {
+            resolve(-1);
+          }
+        };
         req.onsuccess = () => {
           const idbDb = req.result;
           if (!idbDb.objectStoreNames.contains('replay-events')) {
@@ -284,10 +303,13 @@ test.describe('Replay Persistence — Real Browser', () => {
     expect(afterClearCount).toBe(0);
 
     const replayLen = await page.evaluate(() => {
-      const inst = (window as any).BugSpotter.getInstance();
-      // Internal access for test inspection; the public capture()
-      // would also surface this but adds noise.
-      return inst?.captureManager?.domCollector?.getEvents?.().length ?? 0;
+      // Internal access for test inspection (bracket notation —
+      // see waitForBufferEvents comment for the mangling rationale).
+      const inst = (window as any).BugSpotter['getInstance']();
+      return (
+        inst?.['captureManager']?.['domCollector']?.['getEvents']?.().length ??
+        0
+      );
     });
     // At least one restored event is present. We don't pin the exact
     // count because rrweb's pruning + CircularBuffer.prune may drop
@@ -486,8 +508,12 @@ test.describe('Replay Persistence — Real Browser', () => {
     // for ">= 1" alone would resolve instantly without actually
     // waiting for btn-b. Snapshot before, poll for the delta.
     const preClickCount = await page.evaluate(() => {
-      const inst = (window as any).BugSpotter.getInstance();
-      return inst?.captureManager?.domCollector?.getEvents?.().length ?? 0;
+      // Bracket notation — see waitForBufferEvents comment.
+      const inst = (window as any).BugSpotter['getInstance']();
+      return (
+        inst?.['captureManager']?.['domCollector']?.['getEvents']?.().length ??
+        0
+      );
     });
     await page.click('#btn-b');
     await waitForBufferEvents(page, preClickCount + 1);

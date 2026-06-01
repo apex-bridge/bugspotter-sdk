@@ -124,17 +124,27 @@ async function readReplayCount(page: Page, dbName: string): Promise<number> {
           resolve(0);
           return;
         }
-        const tx = idbDb.transaction('replay-events', 'readonly');
-        const store = tx.objectStore('replay-events');
-        const countReq = store.count();
-        countReq.onsuccess = () => {
-          idbDb.close();
-          resolve(countReq.result);
-        };
-        countReq.onerror = () => {
+        // idbDb.transaction() / objectStore() / count() can throw
+        // synchronously (InvalidStateError on a closing connection,
+        // TransactionInactiveError, etc.). Without a try/catch the
+        // Promise executor never settles and the polling loop hangs
+        // at Playwright's default timeout.
+        try {
+          const tx = idbDb.transaction('replay-events', 'readonly');
+          const store = tx.objectStore('replay-events');
+          const countReq = store.count();
+          countReq.onsuccess = () => {
+            idbDb.close();
+            resolve(countReq.result);
+          };
+          countReq.onerror = () => {
+            idbDb.close();
+            resolve(-1);
+          };
+        } catch {
           idbDb.close();
           resolve(-1);
-        };
+        }
       };
     });
   }, dbName);

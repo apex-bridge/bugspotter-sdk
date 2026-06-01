@@ -5,10 +5,11 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
-    // Exclude all `*.spec.ts` so Playwright specs (which use
-    // @playwright/test's test.describe) don't get picked up by
-    // vitest and crash on the mismatched runtime.
-    exclude: ['**/node_modules/**', '**/dist/**', '**/*.spec.ts'],
+    // Exclude only the Playwright E2E specs (which use
+    // @playwright/test's test.describe and would crash vitest on the
+    // mismatched runtime). Scoped to tests/e2e/ so a future
+    // unit-test *.spec.ts elsewhere isn't silently skipped.
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**/*.spec.ts'],
     environmentOptions: {
       jsdom: {
         resources: 'usable',

@@ -22,6 +22,9 @@ import { pathToFileURL } from 'url';
 // IndexedDB access on opaque origins, which the SDK's tab-scoping
 // path depends on. pathToFileURL handles Windows drive letters,
 // backslash → forward-slash, and special-char escaping correctly.
+// Resolved via process.cwd() — Playwright's TS loader transpiles
+// imports to CJS, so import.meta.url isn't available here without
+// reconfiguring the project as full ESM (out of scope for this PR).
 const FIXTURE_URL = pathToFileURL(
   path.join(process.cwd(), 'tests/fixtures/replay-persistence-page.html')
 ).href;
@@ -248,21 +251,26 @@ async function dispatchVisibilityChange(
 }
 
 /**
+ * Wire fail-fast on browser-side uncaught exceptions. SDK runtime
+ * errors, rrweb crashes, or test-harness JS bugs would otherwise be
+ * invisible. beforeEach only covers the fixture `page`, so tests
+ * that open additional pages via `context.newPage()` must call this
+ * explicitly on each new page.
+ */
+function failOnPageError(page: Page): void {
+  page.on('pageerror', (err) => {
+    throw new Error(`Unhandled browser exception: ${err.stack || err.message}`);
+  });
+}
+
+/**
  * Tear down any prior SDK instance before each test so state doesn't
  * bleed across the suite, and use a fresh dbName per test to keep
  * IDB scope clean.
  */
 test.describe('Replay Persistence — Real Browser', () => {
   test.beforeEach(async ({ page }) => {
-    // Fail the test on any unhandled browser exception rather than
-    // letting it pass silently. SDK runtime errors, rrweb crashes,
-    // or test-harness JS bugs would otherwise be invisible — the
-    // assertion below would pass against a degraded state.
-    page.on('pageerror', (err) => {
-      throw new Error(
-        `Unhandled browser exception: ${err.stack || err.message}`
-      );
-    });
+    failOnPageError(page);
   });
 
   test('full reload restores prior-session events from IDB', async ({
@@ -323,10 +331,12 @@ test.describe('Replay Persistence — Real Browser', () => {
     // Both pages use the SAME baseDbName but should resolve to
     // DIFFERENT effective dbNames because sessionStorage is per-tab.
     const page1 = await context.newPage();
+    failOnPageError(page1);
     await loadFixtureAndSdk(page1);
     const tab1Db = await initWithPersistence(page1, 'e2e-tabs');
 
     const page2 = await context.newPage();
+    failOnPageError(page2);
     await loadFixtureAndSdk(page2);
     const tab2Db = await initWithPersistence(page2, 'e2e-tabs');
 
@@ -450,16 +460,15 @@ test.describe('Replay Persistence — Real Browser', () => {
       const list = await indexedDB.databases();
       return list.map((d) => d.name).filter((n): n is string => !!n);
     });
-    if (dbs === null) {
-      test.info().annotations.push({
-        type: 'skip-detail',
-        description:
-          'indexedDB.databases() not supported; cannot assert no-db negative',
-      });
-      return;
-    }
-    expect(dbs.filter((n) => n.startsWith('e2e-disabled'))).toEqual([]);
-    expect(dbs.filter((n) => n.startsWith('bugspotter'))).toEqual([]);
+    // test.skip() (not early return) so the reporter records this as
+    // SKIPPED with a reason rather than PASS. Returning would silently
+    // bypass the only assertions in this test.
+    test.skip(
+      dbs === null,
+      'indexedDB.databases() not supported; cannot assert no-db negative'
+    );
+    expect(dbs!.filter((n) => n.startsWith('e2e-disabled'))).toEqual([]);
+    expect(dbs!.filter((n) => n.startsWith('bugspotter'))).toEqual([]);
   });
 
   test('back-forward navigation does not duplicate events on next flush', async ({
@@ -471,6 +480,7 @@ test.describe('Replay Persistence — Real Browser', () => {
     // mechanisms protect against the duplication scenario whether
     // bfcache activated or not — that's what we assert.
     const page = await context.newPage();
+    failOnPageError(page);
     await loadFixtureAndSdk(page);
     const dbName = await initWithPersistence(page, 'e2e-bfcache');
 
@@ -532,7 +542,17 @@ test.describe('Replay Persistence — Real Browser', () => {
     // sanity check that doesn't depend on capturing the count at the
     // exact "settled" moment, so the lower-bound poll is sufficient.
     const expectedMinCount = sdkAlive ? initialCount + 1 : 1;
-    await waitForReplayCount(page, dbName, expectedMinCount);
+    // Capture and assert the settled count rather than discarding the
+    // poll result. waitForReplayCount returns whatever it last saw on
+    // timeout, so without this lower-bound assertion a flush that
+    // never lands could still let the < initialCount + 50 upper bound
+    // pass — same vacuous-test shape we fixed at line 410.
+    const settledCount = await waitForReplayCount(
+      page,
+      dbName,
+      expectedMinCount
+    );
+    expect(settledCount).toBeGreaterThanOrEqual(expectedMinCount);
 
     const finalCount = await readReplayCount(page, dbName);
     // We don't pin the exact count (bfcache hit vs cold reload

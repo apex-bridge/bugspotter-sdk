@@ -43,18 +43,19 @@ reviews:
   # tweak below so the bot doesn't quibble over `as any` patterns
   # we use to access SDK internals from page.evaluate.
   #
-  # CodeRabbit's `path_filters` uses gitignore-style semantics: a
-  # bare pattern is an EXCLUDE; a `!`-prefixed pattern re-INCLUDES
-  # (overrides a broader exclude). Use bare patterns here.
+  # CodeRabbit's `path_filters` uses git-sparse-checkout semantics
+  # (NOT gitignore): bare patterns INCLUDE; `!`-prefixed patterns
+  # EXCLUDE. Per the official docs example (`!dist/**`, `src/**`),
+  # use `!`-prefix to skip something from review.
   path_filters:
-    - 'dist/**'
-    - '**/*.min.js'
-    - '**/*.min.js.map'
-    - '**/*.d.ts'
-    - 'benchmarks/**'
-    - 'tests/fixtures/**'
-    - '.github/workflows/cdn-deploy.yml'
-    - 'pnpm-lock.yaml'
+    - '!dist/**'
+    - '!**/*.min.js'
+    - '!**/*.min.js.map'
+    - '!**/*.d.ts'
+    - '!benchmarks/**'
+    - '!tests/fixtures/**'
+    - '!.github/workflows/cdn-deploy.yml'
+    - '!pnpm-lock.yaml'
   path_instructions:
     - path: 'src/**/*.ts'
       instructions: |

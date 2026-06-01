@@ -40,17 +40,16 @@ async function loadFixtureAndSdk(page: Page): Promise<void> {
   await injectSdkBundle(page);
 }
 
-/** Inject the built SDK bundle into the page. */
+/**
+ * Inject the built SDK bundle into the page. Errors propagate as-is
+ * (Playwright surfaces ENOENT clearly for a missing file; wrapping
+ * would mask Target-closed / navigation-interrupt errors with a
+ * misleading "build first" message).
+ */
 async function injectSdkBundle(page: Page): Promise<void> {
-  try {
-    await page.addScriptTag({
-      path: path.join(process.cwd(), 'dist/bugspotter.min.js'),
-    });
-  } catch {
-    throw new Error(
-      'SDK bundle not found at dist/bugspotter.min.js. Run `pnpm build` first.'
-    );
-  }
+  await page.addScriptTag({
+    path: path.join(process.cwd(), 'dist/bugspotter.min.js'),
+  });
 }
 
 /**
@@ -133,6 +132,22 @@ async function readReplayCount(page: Page, dbName: string): Promise<number> {
       // executor reject.
       try {
         const req = indexedDB.open(db);
+        // If the DB doesn't exist yet (e.g. probe runs before any
+        // SDK flush), indexedDB.open WOULD create an empty DB at
+        // version 1 with no object stores. A subsequent SDK init
+        // at the same version would then NOT fire onupgradeneeded
+        // and assume stores exist — fail with NotFoundError on
+        // first tx. Abort the upgrade so we don't leave that
+        // phantom. (In current tests SDK init happens first and
+        // creates the stores; this is defensive against future
+        // tests that probe pre-init.)
+        req.onupgradeneeded = () => {
+          try {
+            req.transaction?.abort();
+          } catch {
+            // already aborted/finished
+          }
+        };
         req.onerror = () => resolve(-1);
         req.onsuccess = () => {
           const idbDb = req.result;
@@ -217,8 +232,12 @@ test.describe('Replay Persistence — Real Browser', () => {
     expect(beforeCount).toBeGreaterThan(0);
 
     // Real page reload — destroys the in-memory rrweb buffer.
+    // page.reload() already reloads FIXTURE_URL; only the SDK
+    // bundle injection has to be repeated post-reload. Calling
+    // loadFixtureAndSdk here would redundantly page.goto the same
+    // URL we just reloaded, racing the post-reload state.
     await page.reload();
-    await loadFixtureAndSdk(page);
+    await injectSdkBundle(page);
 
     // Re-init with same dbName triggers restore(). Restored events
     // land in the buffer; IDB is wiped atomically by readAndClear.

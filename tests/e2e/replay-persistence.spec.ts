@@ -235,7 +235,15 @@ async function dispatchVisibilityChange(
  */
 test.describe('Replay Persistence — Real Browser', () => {
   test.beforeEach(async ({ page }) => {
-    page.on('pageerror', (err) => console.error('[Browser Error]:', err));
+    // Fail the test on any unhandled browser exception rather than
+    // letting it pass silently. SDK runtime errors, rrweb crashes,
+    // or test-harness JS bugs would otherwise be invisible — the
+    // assertion below would pass against a degraded state.
+    page.on('pageerror', (err) => {
+      throw new Error(
+        `Unhandled browser exception: ${err.stack || err.message}`
+      );
+    });
   });
 
   test('full reload restores prior-session events from IDB', async ({

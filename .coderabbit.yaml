@@ -1,0 +1,124 @@
+# CodeRabbit configuration for the BugSpotter SDK.
+#
+# Tuning notes:
+# - This is an open-source TypeScript SDK with heavy concurrency surface
+#   (IndexedDB lifecycle, async/await chains, browser-event listeners,
+#   rrweb buffer management). We want CodeRabbit to focus on real
+#   correctness — concurrency races, missing try/catch on browser-API
+#   sync throws, IDB transaction lifecycle gaps, data-integrity bugs,
+#   security holes — and to skip stylistic preferences (helper-vs-
+#   expect.poll, naming, comment phrasing).
+# - Gemini already reviews these PRs and tends to enumerate each site
+#   of a pattern individually. CodeRabbit's value-add is the second
+#   independent voice; we want it terse and substantive, not adding
+#   to the noise floor.
+# - Public-facing schema docs:
+#   https://docs.coderabbit.ai/reference/configuration
+language: en-US
+early_access: false
+tone_instructions: |
+  Be concise. Skip preamble ("Great work!", "Looking at this PR…").
+  Lead with the concrete issue at file:line. State the failure mode,
+  not just the rule. If multiple instances of the same pattern exist
+  in the diff, call them out as a class in ONE comment rather than
+  enumerating each site separately.
+
+reviews:
+  profile: assertive
+  # Block-on-changes is too aggressive for a healthy PR flow — keep
+  # findings as suggestions, not gates.
+  request_changes_workflow: false
+  high_level_summary: true
+  # Disable the famous CodeRabbit poem — pure noise on tech PRs.
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  # Auto-review opened/synchronized PRs; skip drafts so WIP doesn't
+  # get pinged.
+  auto_review:
+    enabled: true
+    drafts: false
+  # File-glob exclusions: skip build artifacts, fixtures, and
+  # benchmarks. Test code is reviewed but with the path-instruction
+  # tweak below so the bot doesn't quibble over `as any` patterns
+  # we use to access SDK internals from page.evaluate.
+  path_filters:
+    - '!dist/**'
+    - '!**/*.min.js'
+    - '!**/*.min.js.map'
+    - '!**/*.d.ts'
+    - '!benchmarks/**'
+    - '!tests/fixtures/**'
+    - '!.github/workflows/cdn-deploy.yml'
+    - '!pnpm-lock.yaml'
+  path_instructions:
+    - path: 'src/**/*.ts'
+      instructions: |
+        Focus areas for source files:
+          - Concurrency: races on shared state, missing try/catch
+            around sync-throwable browser APIs (IDB tx open, cursor,
+            objectStore lookup), unhandled promise rejections from
+            fire-and-forget chains (`void p.then(...)`), missing
+            cleanup in destroy paths.
+          - IndexedDB lifecycle: tx.abort on uncaught throws inside
+            request handlers, preventDefault interaction with
+            auto-abort, onupgradeneeded handling, soft-fail on
+            unavailable/closed connections.
+          - Soft-fail contract: storage / network failures must never
+            throw to the capture flow. Every async boundary should
+            log+swallow.
+          - Type safety: `as unknown as X` narrowings, missing null
+            guards on browser API results.
+          - Security: client-side XSS through DOM construction,
+            prototype pollution via merge helpers, sensitive data
+            leaking into logs, PII in event payloads.
+          - Soft-fail logging: prefer `getLogger()` over raw `console`
+            (we have eslint-disable comments to clean up if reused).
+        Skip stylistic suggestions: comment phrasing, variable naming,
+        custom helpers vs library equivalents (we have rationale for
+        most custom helpers documented inline).
+    - path: 'tests/**/*.{ts,spec.ts,test.ts}'
+      instructions: |
+        Tests pattern:
+          - `as any` / `as unknown as X` casts at SDK-internal access
+            sites are intentional (the tests stub or probe private
+            state); do not flag these.
+          - Stub-storage helpers in unit tests intentionally type the
+            storage as `as unknown as AsyncStorage`; do not flag.
+          - DO flag: missing assertions (e.g. mocking a method but
+            never asserting it was called), vacuous tests (the stub
+            short-circuits the path under test), tests that pass
+            because they don't exercise the path the test name
+            claims to verify.
+          - DO flag: fixed `waitForTimeout` in places where a
+            condition-based poll would work; missing cleanup that
+            could leak state between tests; race-prone setup that
+            depends on microtask ordering.
+
+  # Tools — keep CodeRabbit's built-in static-analysis tools on
+  # where they're useful, off where they overlap with our existing
+  # CI (eslint, prettier, tsc).
+  tools:
+    # ESLint is already part of our CI (Lint and Format Check job);
+    # CodeRabbit's eslint integration would duplicate findings.
+    eslint:
+      enabled: false
+    # Same — prettier runs in lint-staged + CI.
+    prettier:
+      enabled: false
+    # GitHub Actions linting — actionlint catches workflow issues
+    # we'd otherwise miss until a CI run.
+    actionlint:
+      enabled: true
+    # Markdown lint — light touch, can leave on. Most of our markdown
+    # is PR descriptions / READMEs, not user-facing docs.
+    markdownlint:
+      enabled: true
+    # Shellcheck — for shell scripts in scripts/ and workflows.
+    shellcheck:
+      enabled: true
+    # Skip the others (semgrep, ast-grep, etc.) — high signal-to-noise
+    # ratio against custom rulesets, but we don't have them today.
+
+chat:
+  auto_reply: true

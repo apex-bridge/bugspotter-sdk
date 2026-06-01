@@ -103,10 +103,22 @@ async function waitForReplayCount(
   const deadline = Date.now() + timeoutMs;
   let last = -1;
   while (Date.now() < deadline) {
-    last = await readReplayCount(page, dbName);
-    const matched = op === 'gte' ? last >= target : last === target;
-    if (matched) return last;
-    await page.waitForTimeout(50);
+    // page.evaluate can throw "Target closed" / "Execution context
+    // was destroyed" if the call lands during a page.reload() or
+    // page.goto() — that's the exact window we're polling through
+    // in the reload + bfcache tests. Swallow + retry rather than
+    // letting transient navigation errors abort the loop.
+    try {
+      last = await readReplayCount(page, dbName);
+      const matched = op === 'gte' ? last >= target : last === target;
+      if (matched) return last;
+    } catch {
+      // Page context unavailable; retry next tick.
+    }
+    // Node setTimeout (not page.waitForTimeout) because the page
+    // may be mid-navigation — waitForTimeout against a closing
+    // context would itself throw.
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
   return last;
 }
@@ -115,37 +127,45 @@ async function waitForReplayCount(
 async function readReplayCount(page: Page, dbName: string): Promise<number> {
   return page.evaluate((db) => {
     return new Promise<number>((resolve) => {
-      const req = indexedDB.open(db);
-      req.onerror = () => resolve(-1);
-      req.onsuccess = () => {
-        const idbDb = req.result;
-        if (!idbDb.objectStoreNames.contains('replay-events')) {
-          idbDb.close();
-          resolve(0);
-          return;
-        }
-        // idbDb.transaction() / objectStore() / count() can throw
-        // synchronously (InvalidStateError on a closing connection,
-        // TransactionInactiveError, etc.). Without a try/catch the
-        // Promise executor never settles and the polling loop hangs
-        // at Playwright's default timeout.
-        try {
-          const tx = idbDb.transaction('replay-events', 'readonly');
-          const store = tx.objectStore('replay-events');
-          const countReq = store.count();
-          countReq.onsuccess = () => {
+      // indexedDB.open can throw SecurityError synchronously in
+      // private-browsing / storage-blocked envs; honor the helper's
+      // "-1 on any failure" contract instead of letting the Promise
+      // executor reject.
+      try {
+        const req = indexedDB.open(db);
+        req.onerror = () => resolve(-1);
+        req.onsuccess = () => {
+          const idbDb = req.result;
+          if (!idbDb.objectStoreNames.contains('replay-events')) {
             idbDb.close();
-            resolve(countReq.result);
-          };
-          countReq.onerror = () => {
+            resolve(0);
+            return;
+          }
+          // idbDb.transaction() / objectStore() / count() can throw
+          // synchronously (InvalidStateError on a closing connection,
+          // TransactionInactiveError, etc.). Without a try/catch the
+          // Promise executor never settles and the polling loop hangs
+          // at Playwright's default timeout.
+          try {
+            const tx = idbDb.transaction('replay-events', 'readonly');
+            const store = tx.objectStore('replay-events');
+            const countReq = store.count();
+            countReq.onsuccess = () => {
+              idbDb.close();
+              resolve(countReq.result);
+            };
+            countReq.onerror = () => {
+              idbDb.close();
+              resolve(-1);
+            };
+          } catch {
             idbDb.close();
             resolve(-1);
-          };
-        } catch {
-          idbDb.close();
-          resolve(-1);
-        }
-      };
+          }
+        };
+      } catch {
+        resolve(-1);
+      }
     });
   }, dbName);
 }

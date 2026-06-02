@@ -104,7 +104,7 @@
     "fake-indexeddb": "^6.2.5",
     "happy-dom": "^20.0.2",
     "jsdom": "^29.1.1",
-    "lint-staged": "^16.4.0",
+    "lint-staged": "^17.0.7",
     "prettier": "^3.4.2",
     "rollup": "^4.55.1",
     "rollup-plugin-dts": "^6.3.0",

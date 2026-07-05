@@ -85,7 +85,7 @@
     "html-to-image": "^1.11.13",
     "pako": "^2.1.0",
     "rrweb": "2.0.0-alpha.4",
-    "rrweb-snapshot": "2.0.0-alpha.4"
+    "rrweb-snapshot": "2.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

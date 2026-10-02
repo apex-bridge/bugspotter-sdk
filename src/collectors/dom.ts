@@ -183,6 +183,7 @@ export class DOMCollector {
     }
 
     try {
+      const sanitizer = this.sanitizer;
       const recordConfig = {
         emit: (event: eventWithTime) => {
           if (this.emitQueue) {
@@ -199,12 +200,21 @@ export class DOMCollector {
         },
         recordCanvas: this.config.recordCanvas,
         recordCrossOriginIframes: this.config.recordCrossOriginIframes,
-        // PII sanitization for text content
-        maskTextFn: this.sanitizer
-          ? (text: string, element?: HTMLElement) => {
-              return this.sanitizer!.sanitizeTextNode(text, element);
-            }
-          : undefined,
+        // PII sanitization for text content. rrweb only calls maskTextFn on
+        // nodes matched by maskTextClass / maskTextSelector, so '*' is what
+        // routes every text node through the sanitizer.
+        ...(sanitizer && {
+          maskTextSelector: '*',
+          maskTextFn: (text: string, element?: HTMLElement) => {
+            return sanitizer.sanitizeTextNode(text, element);
+          },
+          // Input values are a separate rrweb axis (maskText* skips them).
+          // Mask them all rather than routing through maskInputFn: in
+          // rrweb 2.0.0-alpha.4 the full snapshot ignores maskInputFn and
+          // input events call it without the element, so it can't tell a
+          // password field from a search box.
+          maskAllInputs: true,
+        }),
         // Performance optimizations
         slimDOMOptions: {
           script: true, // Don't record script tags

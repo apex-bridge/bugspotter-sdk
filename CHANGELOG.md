@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `engines.node` raised from `>=16.0.0` to `>=20.19.0` (#116)
-- When the PII sanitizer is enabled (the default), all form input values in session replay, including hidden inputs, are now masked with asterisks (#170)
+- When the PII sanitizer is enabled (the default), session replay now masks input, textarea and select values with asterisks, including hidden inputs (radio, checkbox, submit and button values, which the page author defines, stay readable) (#170)
 
 ### Fixed
 

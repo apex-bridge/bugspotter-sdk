@@ -266,4 +266,26 @@ describe('DOMCollector replay sanitization', () => {
       expect(serialized()).not.toContain('hunter3secret');
     });
   });
+
+  describe('with a disabled sanitizer', () => {
+    beforeEach(() => {
+      collector = new DOMCollector({
+        sanitizer: new Sanitizer({ enabled: false }),
+      });
+    });
+
+    it('records hidden input values unmasked', () => {
+      document.body.innerHTML = `<input type="hidden" value="${TOKEN}">`;
+      collector.startRecording();
+
+      expect(serialized()).toContain(TOKEN);
+    });
+
+    it('records textarea child text unmasked', () => {
+      document.body.innerHTML = `<textarea>${DRAFT}</textarea>`;
+      collector.startRecording();
+
+      expect(serialized()).toContain(`"textContent":"${DRAFT}"`);
+    });
+  });
 });

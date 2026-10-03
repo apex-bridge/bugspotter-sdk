@@ -255,7 +255,9 @@ export class DOMCollector {
     }
 
     try {
-      const sanitizer = this.sanitizer;
+      const sanitizer = this.sanitizer?.isEnabled()
+        ? this.sanitizer
+        : undefined;
       const recordConfig = {
         emit: (event: eventWithTime) => {
           if (sanitizer) {

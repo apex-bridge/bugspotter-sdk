@@ -228,6 +228,13 @@ export class Sanitizer {
   }
 
   /**
+   * Whether sanitization is active. A disabled instance is a no-op.
+   */
+  public isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
    * Guard clause helper - DRY principle
    */
   private guardDisabled<T>(value: T): T | undefined {

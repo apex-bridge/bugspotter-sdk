@@ -60,12 +60,27 @@ const maskFormText = (text: string): string => '*'.repeat(text.length);
 const isTextarea = (node: Node | null | undefined): boolean =>
   node?.nodeName === 'TEXTAREA';
 
+/**
+ * Ids of textareas and their child text nodes, collected from serialized
+ * nodes. A recorded cross-origin iframe posts its events to rrweb in the
+ * parent, which remaps their ids to nodes record.mirror doesn't hold, so
+ * textarea ancestry can't come from the mirror alone.
+ */
+interface TextareaIds {
+  textareas: Set<number>;
+  texts: Set<number>;
+}
+
 function sanitizeSerializedNode(
   node: serializedNodeWithId,
   sanitizer: Sanitizer,
+  textareaIds: TextareaIds,
   inTextarea = false
 ): void {
   if (node.type === NodeType.Text) {
+    if (inTextarea) {
+      textareaIds.texts.add(node.id);
+    }
     if (!node.textContent) return;
     if (inTextarea) {
       node.textContent = maskFormText(node.textContent);
@@ -79,8 +94,11 @@ function sanitizeSerializedNode(
   }
   const childInTextarea =
     node.type === NodeType.Element && node.tagName === 'textarea';
+  if (childInTextarea) {
+    textareaIds.textareas.add(node.id);
+  }
   for (const child of node.childNodes) {
-    sanitizeSerializedNode(child, sanitizer, childInTextarea);
+    sanitizeSerializedNode(child, sanitizer, textareaIds, childInTextarea);
   }
 }
 
@@ -93,9 +111,13 @@ function sanitizeSerializedNode(
  *   through maskTextFn, while maskInputOptions only masks `attributes.value`.
  *   Mask it like the value so form values never appear readable.
  */
-function sanitizeReplayEvent(event: eventWithTime, sanitizer: Sanitizer): void {
+function sanitizeReplayEvent(
+  event: eventWithTime,
+  sanitizer: Sanitizer,
+  textareaIds: TextareaIds
+): void {
   if (event.type === EventType.FullSnapshot) {
-    sanitizeSerializedNode(event.data.node, sanitizer);
+    sanitizeSerializedNode(event.data.node, sanitizer, textareaIds);
     return;
   }
   if (
@@ -104,18 +126,24 @@ function sanitizeReplayEvent(event: eventWithTime, sanitizer: Sanitizer): void {
   ) {
     return;
   }
+  for (const remove of event.data.removes) {
+    textareaIds.textareas.delete(remove.id);
+    textareaIds.texts.delete(remove.id);
+  }
   for (const add of event.data.adds) {
     sanitizeSerializedNode(
       add.node,
       sanitizer,
+      textareaIds,
       add.node.type === NodeType.Text &&
-        isTextarea(record.mirror.getNode(add.parentId))
+        (textareaIds.textareas.has(add.parentId) ||
+          isTextarea(record.mirror.getNode(add.parentId)))
     );
   }
   for (const text of event.data.texts) {
     if (!text.value) continue;
     const node = record.mirror.getNode(text.id);
-    if (isTextarea(node?.parentNode)) {
+    if (textareaIds.texts.has(text.id) || isTextarea(node?.parentNode)) {
       text.value = maskFormText(text.value);
     } else if (!node || node.parentElement === null) {
       // Unknown node: sanitize anyway (the sanitizer is idempotent).
@@ -258,10 +286,14 @@ export class DOMCollector {
       const sanitizer = this.sanitizer?.isEnabled()
         ? this.sanitizer
         : undefined;
+      const textareaIds: TextareaIds = {
+        textareas: new Set(),
+        texts: new Set(),
+      };
       const recordConfig = {
         emit: (event: eventWithTime) => {
           if (sanitizer) {
-            sanitizeReplayEvent(event, sanitizer);
+            sanitizeReplayEvent(event, sanitizer, textareaIds);
           }
           if (this.emitQueue) {
             this.emitQueue.push(event);

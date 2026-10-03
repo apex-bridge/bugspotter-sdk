@@ -168,6 +168,112 @@ describe('DOMCollector replay sanitization', () => {
       });
     });
 
+    // A recorded child frame calls rrweb's postMessage instead of our emit, so
+    // the guard runs only in the parent. rrweb remaps child ids to ids the
+    // parent's record.mirror doesn't hold. Posts what a child record() sends.
+    describe('textarea child text in a cross-origin iframe', () => {
+      const REMOTE_TEXTAREA = 5;
+      const REMOTE_TEXT = 6;
+      const iframe = document.createElement('iframe');
+
+      const postFromChild = (event: object) =>
+        window.dispatchEvent(
+          new window.MessageEvent('message', {
+            data: { type: 'rrweb', event, isCheckout: false },
+            source: iframe.contentWindow,
+          })
+        );
+
+      const childMutation = (data: object) =>
+        postFromChild({
+          type: 3,
+          timestamp: Date.now(),
+          data: {
+            source: 0,
+            adds: [],
+            removes: [],
+            texts: [],
+            attributes: [],
+            ...data,
+          },
+        });
+
+      beforeEach(() => {
+        collector = new DOMCollector({
+          sanitizer: new Sanitizer({ enabled: true }),
+          recordCrossOriginIframes: true,
+        });
+        document.body.appendChild(iframe);
+        collector.startRecording();
+        postFromChild({
+          type: 2,
+          timestamp: Date.now(),
+          data: {
+            node: {
+              type: 0,
+              id: 1,
+              childNodes: [
+                {
+                  type: 2,
+                  id: 2,
+                  tagName: 'html',
+                  attributes: {},
+                  childNodes: [
+                    {
+                      type: 2,
+                      id: 3,
+                      tagName: 'body',
+                      attributes: {},
+                      childNodes: [
+                        {
+                          type: 2,
+                          id: REMOTE_TEXTAREA,
+                          tagName: 'textarea',
+                          attributes: {},
+                          childNodes: [],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            initialOffset: { top: 0, left: 0 },
+          },
+        });
+      });
+
+      it('masks child text appended to an existing textarea', () => {
+        childMutation({
+          adds: [
+            {
+              parentId: REMOTE_TEXTAREA,
+              nextId: null,
+              node: { type: 3, id: REMOTE_TEXT, textContent: DRAFT },
+            },
+          ],
+        });
+
+        expect(serialized()).toContain('"tagName":"textarea"');
+        expect(serialized()).not.toContain(DRAFT);
+      });
+
+      it('masks child text changed after recording starts', () => {
+        childMutation({
+          adds: [
+            {
+              parentId: REMOTE_TEXTAREA,
+              nextId: null,
+              node: { type: 3, id: REMOTE_TEXT, textContent: CONTROL },
+            },
+          ],
+        });
+        childMutation({ texts: [{ id: REMOTE_TEXT, value: DRAFT }] });
+
+        expect(serialized()).not.toContain(DRAFT);
+      });
+    });
+
     // Text whose parent is a ShadowRoot has no parentElement, so alpha.4's
     // needMaskingText skips maskTextFn for it on every path.
     describe('shadow root text', () => {

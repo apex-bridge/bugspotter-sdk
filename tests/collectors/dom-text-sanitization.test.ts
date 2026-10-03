@@ -124,6 +124,69 @@ describe('DOMCollector replay sanitization', () => {
     });
   });
 
+  // Text whose parent is a ShadowRoot has no parentElement, so alpha.4's
+  // needMaskingText skips maskTextFn for it on every path.
+  describe('with sanitizer, shadow root text', () => {
+    const SHADOW = `Shadow contact ${EMAIL}`;
+
+    const host = () => {
+      const el = document.createElement('div');
+      el.attachShadow({ mode: 'open' });
+      return el;
+    };
+
+    beforeEach(() => {
+      collector = new DOMCollector({
+        sanitizer: new Sanitizer({ enabled: true }),
+      });
+    });
+
+    it('redacts PII present at snapshot time', () => {
+      const el = host();
+      el.shadowRoot!.append(SHADOW);
+      document.body.appendChild(el);
+      collector.startRecording();
+
+      expect(serialized()).toContain('Shadow contact');
+      expect(serialized()).not.toContain(EMAIL);
+    });
+
+    it('redacts PII appended after recording starts', async () => {
+      const el = host();
+      document.body.appendChild(el);
+      collector.startRecording();
+      el.shadowRoot!.append(SHADOW);
+      await flush();
+
+      expect(serialized()).toContain('Shadow contact');
+      expect(serialized()).not.toContain(EMAIL);
+    });
+
+    it('redacts PII in a shadow host added after recording starts', async () => {
+      collector.startRecording();
+      const el = host();
+      el.shadowRoot!.append(SHADOW);
+      document.body.appendChild(el);
+      await flush();
+
+      expect(serialized()).toContain('Shadow contact');
+      expect(serialized()).not.toContain(EMAIL);
+    });
+
+    it('redacts PII in text changed after recording starts', async () => {
+      const el = host();
+      const text = document.createTextNode(CONTROL);
+      el.shadowRoot!.append(text);
+      document.body.appendChild(el);
+      collector.startRecording();
+      text.data = SHADOW;
+      await flush();
+
+      expect(serialized()).toContain('Shadow contact');
+      expect(serialized()).not.toContain(EMAIL);
+    });
+  });
+
   describe('without sanitizer', () => {
     beforeEach(() => {
       collector = new DOMCollector();

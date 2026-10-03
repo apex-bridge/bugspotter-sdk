@@ -1,4 +1,5 @@
 import { record } from 'rrweb';
+import { EventType, IncrementalSource } from '@rrweb/types';
 import type { eventWithTime } from '@rrweb/types';
 import { CircularBuffer } from '../core/buffer';
 import type { Sanitizer } from '../utils/sanitize';
@@ -52,6 +53,60 @@ export interface DOMCollectorConfig {
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger();
+
+// rrweb-snapshot NodeType.Text
+const SERIALIZED_TEXT_NODE = 3;
+
+interface SerializedNodeLike {
+  type: number;
+  textContent?: string;
+  isShadow?: boolean;
+  isStyle?: boolean;
+  childNodes?: SerializedNodeLike[];
+}
+
+function sanitizeShadowNode(
+  node: SerializedNodeLike,
+  sanitizer: Sanitizer
+): void {
+  if (node.type === SERIALIZED_TEXT_NODE) {
+    if (node.isShadow && !node.isStyle && node.textContent) {
+      node.textContent = sanitizer.sanitizeTextNode(node.textContent);
+    }
+    return;
+  }
+  node.childNodes?.forEach((child) => sanitizeShadowNode(child, sanitizer));
+}
+
+/**
+ * rrweb 2.0.0-alpha.4's needMaskingText returns false for a text node with
+ * no parentElement, so text directly under a ShadowRoot never reaches
+ * maskTextFn (snapshot, added nodes, and text changes alike). Sanitize those
+ * nodes here, before the event is buffered or queued.
+ */
+function sanitizeShadowText(event: eventWithTime, sanitizer: Sanitizer): void {
+  if (event.type === EventType.FullSnapshot) {
+    sanitizeShadowNode(event.data.node as SerializedNodeLike, sanitizer);
+    return;
+  }
+  if (
+    event.type !== EventType.IncrementalSnapshot ||
+    event.data.source !== IncrementalSource.Mutation
+  ) {
+    return;
+  }
+  for (const add of event.data.adds) {
+    sanitizeShadowNode(add.node as SerializedNodeLike, sanitizer);
+  }
+  for (const text of event.data.texts) {
+    const node = record.mirror.getNode(text.id);
+    // Unknown node: sanitize anyway (the sanitizer is idempotent).
+    if (text.value && (!node || node.parentElement === null)) {
+      text.value = sanitizer.sanitizeTextNode(text.value);
+    }
+  }
+}
+
 export class DOMCollector {
   private buffer: CircularBuffer;
   private stopRecordingFn?: () => void;
@@ -186,6 +241,9 @@ export class DOMCollector {
       const sanitizer = this.sanitizer;
       const recordConfig = {
         emit: (event: eventWithTime) => {
+          if (sanitizer) {
+            sanitizeShadowText(event, sanitizer);
+          }
           if (this.emitQueue) {
             this.emitQueue.push(event);
           } else {

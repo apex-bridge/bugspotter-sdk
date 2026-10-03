@@ -1,6 +1,6 @@
-import { record } from 'rrweb';
-import { EventType, IncrementalSource } from '@rrweb/types';
-import type { eventWithTime } from '@rrweb/types';
+import { record, EventType, IncrementalSource } from 'rrweb';
+import { NodeType } from '@rrweb/types';
+import type { eventWithTime, serializedNodeWithId } from '@rrweb/types';
 import { CircularBuffer } from '../core/buffer';
 import type { Sanitizer } from '../utils/sanitize';
 import type {
@@ -54,18 +54,6 @@ import { getLogger } from '../utils/logger';
 
 const logger = getLogger();
 
-// rrweb-snapshot NodeType.Text
-const SERIALIZED_TEXT_NODE = 3;
-
-interface SerializedNodeLike {
-  type: number;
-  tagName?: string;
-  textContent?: string;
-  isShadow?: boolean;
-  isStyle?: boolean;
-  childNodes?: SerializedNodeLike[];
-}
-
 // Same shape as rrweb's input masking: one asterisk per character.
 const maskFormText = (text: string): string => '*'.repeat(text.length);
 
@@ -73,11 +61,11 @@ const isTextarea = (node: Node | null | undefined): boolean =>
   node?.nodeName === 'TEXTAREA';
 
 function sanitizeSerializedNode(
-  node: SerializedNodeLike,
+  node: serializedNodeWithId,
   sanitizer: Sanitizer,
   inTextarea = false
 ): void {
-  if (node.type === SERIALIZED_TEXT_NODE) {
+  if (node.type === NodeType.Text) {
     if (!node.textContent) return;
     if (inTextarea) {
       node.textContent = maskFormText(node.textContent);
@@ -86,10 +74,14 @@ function sanitizeSerializedNode(
     }
     return;
   }
-  const childInTextarea = node.tagName === 'textarea';
-  node.childNodes?.forEach((child) =>
-    sanitizeSerializedNode(child, sanitizer, childInTextarea)
-  );
+  if (node.type !== NodeType.Element && node.type !== NodeType.Document) {
+    return;
+  }
+  const childInTextarea =
+    node.type === NodeType.Element && node.tagName === 'textarea';
+  for (const child of node.childNodes) {
+    sanitizeSerializedNode(child, sanitizer, childInTextarea);
+  }
 }
 
 /**
@@ -103,7 +95,7 @@ function sanitizeSerializedNode(
  */
 function sanitizeReplayEvent(event: eventWithTime, sanitizer: Sanitizer): void {
   if (event.type === EventType.FullSnapshot) {
-    sanitizeSerializedNode(event.data.node as SerializedNodeLike, sanitizer);
+    sanitizeSerializedNode(event.data.node, sanitizer);
     return;
   }
   if (
@@ -113,11 +105,10 @@ function sanitizeReplayEvent(event: eventWithTime, sanitizer: Sanitizer): void {
     return;
   }
   for (const add of event.data.adds) {
-    const node = add.node as SerializedNodeLike;
     sanitizeSerializedNode(
-      node,
+      add.node,
       sanitizer,
-      node.type === SERIALIZED_TEXT_NODE &&
+      add.node.type === NodeType.Text &&
         isTextarea(record.mirror.getNode(add.parentId))
     );
   }
@@ -284,24 +275,15 @@ export class DOMCollector {
         },
         recordCanvas: this.config.recordCanvas,
         recordCrossOriginIframes: this.config.recordCrossOriginIframes,
-        // PII sanitization for text content. rrweb only calls maskTextFn on
-        // nodes matched by maskTextClass / maskTextSelector, so '*' is what
-        // routes every text node through the sanitizer.
+        // rrweb only calls maskTextFn on nodes matched by maskTextSelector,
+        // so '*' routes every text node through the sanitizer. Input values
+        // are masked by tag name: in alpha.4 maskAllInputs skips hidden and
+        // untyped inputs, and maskInputFn gets no element to spot passwords.
+        // Radio/checkbox/submit/button values (author-defined) stay readable.
         ...(sanitizer && {
           maskTextSelector: '*',
-          maskTextFn: (text: string, element?: HTMLElement) => {
-            return sanitizer.sanitizeTextNode(text, element);
-          },
-          // Input values are a separate rrweb axis (maskText* skips them).
-          // Mask them all rather than routing through maskInputFn: in
-          // rrweb 2.0.0-alpha.4 the full snapshot ignores maskInputFn and
-          // input events call it without the element, so it can't tell a
-          // password field from a search box.
-          // Not maskAllInputs: true. Its alpha.4 map omits `hidden` and keys
-          // on the type attribute, so hidden inputs and inputs without a
-          // type attribute serialize raw. maskInputValue also keys on the
-          // tag name, so `input: true` covers every input type. Snapshot
-          // still keeps radio/checkbox/submit/button values (author-defined).
+          maskTextFn: (text: string, element?: HTMLElement) =>
+            sanitizer.sanitizeTextNode(text, element),
           maskInputOptions: { input: true, textarea: true, select: true },
         }),
         // Performance optimizations

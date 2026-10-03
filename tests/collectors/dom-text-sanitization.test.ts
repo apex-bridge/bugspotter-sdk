@@ -9,6 +9,8 @@ import { Sanitizer } from '../../src/utils/sanitize';
 const EMAIL = 'jane.doe@example.com';
 const CONTROL = 'Checkout total updated';
 const TOKEN = 'csrf-7f3a9c2e41';
+const PASSWORD = 'hunter2secret';
+const DRAFT = 'private draft';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -73,12 +75,11 @@ describe('DOMCollector replay sanitization', () => {
       document.body.innerHTML =
         '<input id="email" type="text"><input id="pw" type="password">';
       (document.getElementById('email') as HTMLInputElement).value = EMAIL;
-      (document.getElementById('pw') as HTMLInputElement).value =
-        'hunter2secret';
+      (document.getElementById('pw') as HTMLInputElement).value = PASSWORD;
       collector.startRecording();
 
       expect(serialized()).not.toContain(EMAIL);
-      expect(serialized()).not.toContain('hunter2secret');
+      expect(serialized()).not.toContain(PASSWORD);
     });
 
     it('masks input values typed after recording starts', async () => {
@@ -86,11 +87,11 @@ describe('DOMCollector replay sanitization', () => {
         '<input id="email" type="text"><input id="pw" type="password">';
       collector.startRecording();
       type('email', EMAIL);
-      type('pw', 'hunter2secret');
+      type('pw', PASSWORD);
       await flush();
 
       expect(serialized()).not.toContain(EMAIL);
-      expect(serialized()).not.toContain('hunter2secret');
+      expect(serialized()).not.toContain(PASSWORD);
     });
 
     // rrweb 2.0.0-alpha.4's maskAllInputs map omits `hidden` and matches on
@@ -122,118 +123,109 @@ describe('DOMCollector replay sanitization', () => {
       expect(serialized()).not.toContain(EMAIL);
       expect(serialized()).not.toContain(TOKEN);
     });
-  });
 
-  // A textarea's child text is its default value. alpha.4 serializes it as a
-  // text node through maskTextFn (PII patterns only), separately from the
-  // masked `attributes.value`, so a non-pattern draft used to leak verbatim.
-  describe('with sanitizer, textarea child text', () => {
-    const DRAFT = 'private draft';
+    // A textarea's child text is its default value. alpha.4 serializes it as a
+    // text node through maskTextFn (PII patterns only), separately from the
+    // masked `attributes.value`, so a non-pattern draft used to leak verbatim.
+    describe('textarea child text', () => {
+      it('masks child text present at snapshot time', () => {
+        document.body.innerHTML = `<textarea>${DRAFT}</textarea><p>${CONTROL}</p>`;
+        collector.startRecording();
 
-    beforeEach(() => {
-      collector = new DOMCollector({
-        sanitizer: new Sanitizer({ enabled: true }),
+        expect(serialized()).not.toContain(DRAFT);
+        expect(serialized()).toContain(
+          `"textContent":"${'*'.repeat(DRAFT.length)}"`
+        );
+        expect(serialized()).toContain(CONTROL);
+      });
+
+      it('masks child text of a textarea added after recording starts', async () => {
+        collector.startRecording();
+        const ta = document.createElement('textarea');
+        ta.textContent = DRAFT;
+        document.body.appendChild(ta);
+        await flush();
+
+        expect(serialized()).not.toContain(DRAFT);
+      });
+
+      it('masks child text appended to an existing textarea', async () => {
+        document.body.innerHTML = '<textarea id="ta"></textarea>';
+        collector.startRecording();
+        document.getElementById('ta')!.append(DRAFT);
+        await flush();
+
+        expect(serialized()).not.toContain(DRAFT);
+      });
+
+      it('masks child text changed after recording starts', async () => {
+        document.body.innerHTML = `<textarea id="ta">${CONTROL}</textarea>`;
+        collector.startRecording();
+        document.getElementById('ta')!.firstChild!.textContent = DRAFT;
+        await flush();
+
+        expect(serialized()).not.toContain(DRAFT);
       });
     });
 
-    it('masks child text present at snapshot time', () => {
-      document.body.innerHTML = `<textarea>${DRAFT}</textarea><p>${CONTROL}</p>`;
-      collector.startRecording();
+    // Text whose parent is a ShadowRoot has no parentElement, so alpha.4's
+    // needMaskingText skips maskTextFn for it on every path.
+    describe('shadow root text', () => {
+      const SHADOW = `Shadow contact ${EMAIL}`;
 
-      expect(serialized()).not.toContain(DRAFT);
-      expect(serialized()).toContain('"textContent":"*************"');
-      expect(serialized()).toContain(CONTROL);
-    });
+      const host = () => {
+        const el = document.createElement('div');
+        el.attachShadow({ mode: 'open' });
+        return el;
+      };
 
-    it('masks child text of a textarea added after recording starts', async () => {
-      collector.startRecording();
-      const ta = document.createElement('textarea');
-      ta.textContent = DRAFT;
-      document.body.appendChild(ta);
-      await flush();
+      // The non-PII prefix proves rrweb recorded the shadow text at all.
+      const expectShadowRedacted = () => {
+        const out = serialized();
+        expect(out).toContain('Shadow contact');
+        expect(out).not.toContain(EMAIL);
+      };
 
-      expect(serialized()).not.toContain(DRAFT);
-    });
+      it('redacts PII present at snapshot time', () => {
+        const el = host();
+        el.shadowRoot!.append(SHADOW);
+        document.body.appendChild(el);
+        collector.startRecording();
 
-    it('masks child text appended to an existing textarea', async () => {
-      document.body.innerHTML = '<textarea id="ta"></textarea>';
-      collector.startRecording();
-      document.getElementById('ta')!.append(DRAFT);
-      await flush();
-
-      expect(serialized()).not.toContain(DRAFT);
-    });
-
-    it('masks child text changed after recording starts', async () => {
-      document.body.innerHTML = `<textarea id="ta">${CONTROL}</textarea>`;
-      collector.startRecording();
-      document.getElementById('ta')!.firstChild!.textContent = DRAFT;
-      await flush();
-
-      expect(serialized()).not.toContain(DRAFT);
-    });
-  });
-
-  // Text whose parent is a ShadowRoot has no parentElement, so alpha.4's
-  // needMaskingText skips maskTextFn for it on every path.
-  describe('with sanitizer, shadow root text', () => {
-    const SHADOW = `Shadow contact ${EMAIL}`;
-
-    const host = () => {
-      const el = document.createElement('div');
-      el.attachShadow({ mode: 'open' });
-      return el;
-    };
-
-    beforeEach(() => {
-      collector = new DOMCollector({
-        sanitizer: new Sanitizer({ enabled: true }),
+        expectShadowRedacted();
       });
-    });
 
-    it('redacts PII present at snapshot time', () => {
-      const el = host();
-      el.shadowRoot!.append(SHADOW);
-      document.body.appendChild(el);
-      collector.startRecording();
+      it('redacts PII appended after recording starts', async () => {
+        const el = host();
+        document.body.appendChild(el);
+        collector.startRecording();
+        el.shadowRoot!.append(SHADOW);
+        await flush();
 
-      expect(serialized()).toContain('Shadow contact');
-      expect(serialized()).not.toContain(EMAIL);
-    });
+        expectShadowRedacted();
+      });
 
-    it('redacts PII appended after recording starts', async () => {
-      const el = host();
-      document.body.appendChild(el);
-      collector.startRecording();
-      el.shadowRoot!.append(SHADOW);
-      await flush();
+      it('redacts PII in a shadow host added after recording starts', async () => {
+        collector.startRecording();
+        const el = host();
+        el.shadowRoot!.append(SHADOW);
+        document.body.appendChild(el);
+        await flush();
 
-      expect(serialized()).toContain('Shadow contact');
-      expect(serialized()).not.toContain(EMAIL);
-    });
+        expectShadowRedacted();
+      });
 
-    it('redacts PII in a shadow host added after recording starts', async () => {
-      collector.startRecording();
-      const el = host();
-      el.shadowRoot!.append(SHADOW);
-      document.body.appendChild(el);
-      await flush();
+      it('redacts PII in text changed after recording starts', async () => {
+        const el = host();
+        const text = document.createTextNode(CONTROL);
+        el.shadowRoot!.append(text);
+        document.body.appendChild(el);
+        collector.startRecording();
+        text.data = SHADOW;
+        await flush();
 
-      expect(serialized()).toContain('Shadow contact');
-      expect(serialized()).not.toContain(EMAIL);
-    });
-
-    it('redacts PII in text changed after recording starts', async () => {
-      const el = host();
-      const text = document.createTextNode(CONTROL);
-      el.shadowRoot!.append(text);
-      document.body.appendChild(el);
-      collector.startRecording();
-      text.data = SHADOW;
-      await flush();
-
-      expect(serialized()).toContain('Shadow contact');
-      expect(serialized()).not.toContain(EMAIL);
+        expectShadowRedacted();
+      });
     });
   });
 
@@ -257,21 +249,20 @@ describe('DOMCollector replay sanitization', () => {
     });
 
     it('records textarea child text unmasked', () => {
-      document.body.innerHTML = '<textarea>private draft</textarea>';
+      document.body.innerHTML = `<textarea>${DRAFT}</textarea>`;
       collector.startRecording();
 
-      expect(serialized()).toContain('"textContent":"private draft"');
+      expect(serialized()).toContain(`"textContent":"${DRAFT}"`);
     });
 
     it('still masks password inputs', async () => {
       document.body.innerHTML = '<input id="pw" type="password">';
-      (document.getElementById('pw') as HTMLInputElement).value =
-        'hunter2secret';
+      (document.getElementById('pw') as HTMLInputElement).value = PASSWORD;
       collector.startRecording();
       type('pw', 'hunter3secret');
       await flush();
 
-      expect(serialized()).not.toContain('hunter2secret');
+      expect(serialized()).not.toContain(PASSWORD);
       expect(serialized()).not.toContain('hunter3secret');
     });
   });

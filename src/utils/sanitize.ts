@@ -96,20 +96,25 @@ class PatternManager {
  * String Sanitizer - SRP: Handles string-level PII detection and replacement
  */
 class StringSanitizer {
-  constructor(private patterns: Map<string, RegExp>) {}
+  // Labels are built once: replay routes every DOM text node through here.
+  private readonly replacements: Array<[RegExp, string]>;
+
+  constructor(private patterns: Map<string, RegExp>) {
+    this.replacements = Array.from(patterns, ([name, regex]) => [
+      regex,
+      `[REDACTED-${name.toUpperCase()}]`,
+    ]);
+  }
 
   sanitize(value: string): string {
-    if (typeof value !== 'string') {
+    if (typeof value !== 'string' || !/\S/.test(value)) {
       return value;
     }
 
     let sanitized = value;
-
-    this.patterns.forEach((regex, name) => {
-      const patternType = name.toUpperCase();
-      sanitized = sanitized.replace(regex, `[REDACTED-${patternType}]`);
-    });
-
+    for (const [regex, label] of this.replacements) {
+      sanitized = sanitized.replace(regex, label);
+    }
     return sanitized;
   }
 }

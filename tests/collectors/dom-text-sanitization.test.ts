@@ -124,6 +124,56 @@ describe('DOMCollector replay sanitization', () => {
     });
   });
 
+  // A textarea's child text is its default value. alpha.4 serializes it as a
+  // text node through maskTextFn (PII patterns only), separately from the
+  // masked `attributes.value`, so a non-pattern draft used to leak verbatim.
+  describe('with sanitizer, textarea child text', () => {
+    const DRAFT = 'private draft';
+
+    beforeEach(() => {
+      collector = new DOMCollector({
+        sanitizer: new Sanitizer({ enabled: true }),
+      });
+    });
+
+    it('masks child text present at snapshot time', () => {
+      document.body.innerHTML = `<textarea>${DRAFT}</textarea><p>${CONTROL}</p>`;
+      collector.startRecording();
+
+      expect(serialized()).not.toContain(DRAFT);
+      expect(serialized()).toContain('"textContent":"*************"');
+      expect(serialized()).toContain(CONTROL);
+    });
+
+    it('masks child text of a textarea added after recording starts', async () => {
+      collector.startRecording();
+      const ta = document.createElement('textarea');
+      ta.textContent = DRAFT;
+      document.body.appendChild(ta);
+      await flush();
+
+      expect(serialized()).not.toContain(DRAFT);
+    });
+
+    it('masks child text appended to an existing textarea', async () => {
+      document.body.innerHTML = '<textarea id="ta"></textarea>';
+      collector.startRecording();
+      document.getElementById('ta')!.append(DRAFT);
+      await flush();
+
+      expect(serialized()).not.toContain(DRAFT);
+    });
+
+    it('masks child text changed after recording starts', async () => {
+      document.body.innerHTML = `<textarea id="ta">${CONTROL}</textarea>`;
+      collector.startRecording();
+      document.getElementById('ta')!.firstChild!.textContent = DRAFT;
+      await flush();
+
+      expect(serialized()).not.toContain(DRAFT);
+    });
+  });
+
   // Text whose parent is a ShadowRoot has no parentElement, so alpha.4's
   // needMaskingText skips maskTextFn for it on every path.
   describe('with sanitizer, shadow root text', () => {
@@ -204,6 +254,13 @@ describe('DOMCollector replay sanitization', () => {
       collector.startRecording();
 
       expect(serialized()).toContain(TOKEN);
+    });
+
+    it('records textarea child text unmasked', () => {
+      document.body.innerHTML = '<textarea>private draft</textarea>';
+      collector.startRecording();
+
+      expect(serialized()).toContain('"textContent":"private draft"');
     });
 
     it('still masks password inputs', async () => {

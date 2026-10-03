@@ -59,34 +59,51 @@ const SERIALIZED_TEXT_NODE = 3;
 
 interface SerializedNodeLike {
   type: number;
+  tagName?: string;
   textContent?: string;
   isShadow?: boolean;
   isStyle?: boolean;
   childNodes?: SerializedNodeLike[];
 }
 
-function sanitizeShadowNode(
+// Same shape as rrweb's input masking: one asterisk per character.
+const maskFormText = (text: string): string => '*'.repeat(text.length);
+
+const isTextarea = (node: Node | null | undefined): boolean =>
+  node?.nodeName === 'TEXTAREA';
+
+function sanitizeSerializedNode(
   node: SerializedNodeLike,
-  sanitizer: Sanitizer
+  sanitizer: Sanitizer,
+  inTextarea = false
 ): void {
   if (node.type === SERIALIZED_TEXT_NODE) {
-    if (node.isShadow && !node.isStyle && node.textContent) {
+    if (!node.textContent) return;
+    if (inTextarea) {
+      node.textContent = maskFormText(node.textContent);
+    } else if (node.isShadow && !node.isStyle) {
       node.textContent = sanitizer.sanitizeTextNode(node.textContent);
     }
     return;
   }
-  node.childNodes?.forEach((child) => sanitizeShadowNode(child, sanitizer));
+  const childInTextarea = node.tagName === 'textarea';
+  node.childNodes?.forEach((child) =>
+    sanitizeSerializedNode(child, sanitizer, childInTextarea)
+  );
 }
 
 /**
- * rrweb 2.0.0-alpha.4's needMaskingText returns false for a text node with
- * no parentElement, so text directly under a ShadowRoot never reaches
- * maskTextFn (snapshot, added nodes, and text changes alike). Sanitize those
- * nodes here, before the event is buffered or queued.
+ * Patches two rrweb 2.0.0-alpha.4 gaps before the event is buffered or queued
+ * (snapshot, added nodes, and text changes alike):
+ * - needMaskingText returns false for a text node with no parentElement, so
+ *   text directly under a ShadowRoot never reaches maskTextFn. Sanitize it.
+ * - A textarea's child text (its default value) is serialized as page text
+ *   through maskTextFn, while maskInputOptions only masks `attributes.value`.
+ *   Mask it like the value so form values never appear readable.
  */
-function sanitizeShadowText(event: eventWithTime, sanitizer: Sanitizer): void {
+function sanitizeReplayEvent(event: eventWithTime, sanitizer: Sanitizer): void {
   if (event.type === EventType.FullSnapshot) {
-    sanitizeShadowNode(event.data.node as SerializedNodeLike, sanitizer);
+    sanitizeSerializedNode(event.data.node as SerializedNodeLike, sanitizer);
     return;
   }
   if (
@@ -96,12 +113,21 @@ function sanitizeShadowText(event: eventWithTime, sanitizer: Sanitizer): void {
     return;
   }
   for (const add of event.data.adds) {
-    sanitizeShadowNode(add.node as SerializedNodeLike, sanitizer);
+    const node = add.node as SerializedNodeLike;
+    sanitizeSerializedNode(
+      node,
+      sanitizer,
+      node.type === SERIALIZED_TEXT_NODE &&
+        isTextarea(record.mirror.getNode(add.parentId))
+    );
   }
   for (const text of event.data.texts) {
+    if (!text.value) continue;
     const node = record.mirror.getNode(text.id);
-    // Unknown node: sanitize anyway (the sanitizer is idempotent).
-    if (text.value && (!node || node.parentElement === null)) {
+    if (isTextarea(node?.parentNode)) {
+      text.value = maskFormText(text.value);
+    } else if (!node || node.parentElement === null) {
+      // Unknown node: sanitize anyway (the sanitizer is idempotent).
       text.value = sanitizer.sanitizeTextNode(text.value);
     }
   }
@@ -242,7 +268,7 @@ export class DOMCollector {
       const recordConfig = {
         emit: (event: eventWithTime) => {
           if (sanitizer) {
-            sanitizeShadowText(event, sanitizer);
+            sanitizeReplayEvent(event, sanitizer);
           }
           if (this.emitQueue) {
             this.emitQueue.push(event);

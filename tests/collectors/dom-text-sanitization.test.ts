@@ -8,6 +8,7 @@ import { Sanitizer } from '../../src/utils/sanitize';
 
 const EMAIL = 'jane.doe@example.com';
 const CONTROL = 'Checkout total updated';
+const TOKEN = 'csrf-7f3a9c2e41';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -91,6 +92,36 @@ describe('DOMCollector replay sanitization', () => {
       expect(serialized()).not.toContain(EMAIL);
       expect(serialized()).not.toContain('hunter2secret');
     });
+
+    // rrweb 2.0.0-alpha.4's maskAllInputs map omits `hidden` and matches on
+    // the type attribute only, so these two shapes used to serialize raw.
+    it('masks hidden input values present at snapshot time', () => {
+      document.body.innerHTML = `<input type="hidden" value="${TOKEN}">`;
+      collector.startRecording();
+
+      expect(serialized()).not.toContain(TOKEN);
+    });
+
+    it('masks hidden input values set after recording starts', async () => {
+      document.body.innerHTML =
+        '<input id="a" type="hidden"><input id="b" type="hidden">';
+      collector.startRecording();
+      (document.getElementById('a') as HTMLInputElement).value = TOKEN;
+      document.getElementById('b')!.setAttribute('value', `${TOKEN}-attr`);
+      await flush();
+
+      expect(serialized()).not.toContain(TOKEN);
+    });
+
+    it('masks values of inputs without a type attribute', async () => {
+      document.body.innerHTML = `<input value="${EMAIL}"><input id="late">`;
+      collector.startRecording();
+      document.getElementById('late')!.setAttribute('value', `${TOKEN}-late`);
+      await flush();
+
+      expect(serialized()).not.toContain(EMAIL);
+      expect(serialized()).not.toContain(TOKEN);
+    });
   });
 
   describe('without sanitizer', () => {
@@ -103,6 +134,13 @@ describe('DOMCollector replay sanitization', () => {
       collector.startRecording();
 
       expect(serialized()).toContain(CONTROL);
+    });
+
+    it('records non-password input values unmasked', () => {
+      document.body.innerHTML = `<input type="hidden" value="${TOKEN}">`;
+      collector.startRecording();
+
+      expect(serialized()).toContain(TOKEN);
     });
 
     it('still masks password inputs', async () => {

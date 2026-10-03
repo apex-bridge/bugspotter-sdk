@@ -213,7 +213,12 @@ export class DOMCollector {
           // rrweb 2.0.0-alpha.4 the full snapshot ignores maskInputFn and
           // input events call it without the element, so it can't tell a
           // password field from a search box.
-          maskAllInputs: true,
+          // Not maskAllInputs: true. Its alpha.4 map omits `hidden` and keys
+          // on the type attribute, so hidden inputs and inputs without a
+          // type attribute serialize raw. maskInputValue also keys on the
+          // tag name, so `input: true` covers every input type. Snapshot
+          // still keeps radio/checkbox/submit/button values (author-defined).
+          maskInputOptions: { input: true, textarea: true, select: true },
         }),
         // Performance optimizations
         slimDOMOptions: {

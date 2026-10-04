@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Opt-in cross-navigation replay persistence: `replay.persistAcrossNavigation: true` (with a required `replay.dbName`) keeps rrweb events in IndexedDB across full-page reloads, scoped per tab. Flushes on `pagehide` and `visibilitychange` for mobile browsers that skip `pagehide`; restore is an atomic read-and-clear (#128, #133, #135, #136)
 - In-widget deflection: while the user types a title, the widget probes `POST /api/v1/sdk/similar` (400 ms debounce) and shows likely duplicates; picking one submits with `deflected_to_canonical_id`. Needs a backend with the similarity endpoint (#118)
+- `Sanitizer.isEnabled()`: whether a sanitizer instance is active (#170)
 
 ### Changed
 
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Session replay page text now goes through the PII sanitizer; before this it was recorded verbatim (#169)
+- The page URL in session replay metadata is now sanitized, and replay events restored from cross-navigation persistence are sanitized before upload (#170)
 
 ## [2.1.0] - 2026-04-10
 

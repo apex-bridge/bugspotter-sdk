@@ -230,7 +230,7 @@ button.setBackgroundColor('#00ff00');
 
 ## 🔒 PII Sanitization
 
-Automatic detection and masking of sensitive text data **in the browser before upload**. When enabled (default), text fields (console logs, network URLs, metadata) are sanitized before submission. In session replay, page text is sanitized by the same patterns and input, textarea and select values, including hidden inputs, are masked with asterisks (radio, checkbox, submit and button values, which the page author defines, stay readable). For visual exclusion: use `replay.blockSelectors` to hide DOM elements from session replay, and `data-bugspotter-exclude` attribute to exclude elements from screenshots.
+Automatic detection and masking of sensitive text data **in the browser before upload**. When enabled (default), text fields (console logs, network URLs, metadata) are sanitized before submission. In session replay, page text is sanitized by the same patterns and input, textarea and select values, including hidden inputs, are masked with asterisks (radio, checkbox, submit and button values, which the page author defines, stay readable). Element attributes in session replay (for example `href`, `title`, `placeholder`, `alt` and `data-*`) are not sanitized, so use `replay.blockSelectors` for elements whose attributes may carry personal data. For visual exclusion: use `replay.blockSelectors` to hide DOM elements from session replay, and `data-bugspotter-exclude` attribute to exclude elements from screenshots.
 
 ### Built-in Patterns (9 types)
 

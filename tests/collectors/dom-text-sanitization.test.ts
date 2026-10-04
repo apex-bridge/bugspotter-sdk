@@ -1,6 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { eventWithTime } from '@rrweb/types';
 import { DOMCollector } from '../../src/collectors/dom';
 import { Sanitizer } from '../../src/utils/sanitize';
+import type {
+  ReplayPersistence,
+  PersistableBuffer,
+} from '../../src/core/storage/replay-persistence';
 
 // Asserts on the serialized rrweb events, not on the sanitizer in isolation:
 // calling sanitizeTextNode directly passes even when rrweb never invokes it.
@@ -13,6 +18,11 @@ const PASSWORD = 'hunter2secret';
 const DRAFT = 'private draft';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+// Entries held by the collector's textarea tracking. Memory isn't observable
+// through events, so this reads the private field.
+const trackedNodes = (collector: DOMCollector): number =>
+  (collector as unknown as { replayNodes: { size: number } }).replayNodes.size;
 
 const type = (id: string, value: string) => {
   const input = document.getElementById(id) as HTMLInputElement;
@@ -68,6 +78,19 @@ describe('DOMCollector replay sanitization', () => {
         `Contact ${EMAIL}`;
       await flush();
 
+      expect(serialized()).not.toContain(EMAIL);
+    });
+
+    it('redacts PII in the page URL of meta events', () => {
+      const original = window.location.href;
+      window.history.pushState({}, '', `/reset?email=${EMAIL}`);
+      try {
+        collector.startRecording();
+      } finally {
+        window.history.replaceState({}, '', original);
+      }
+
+      expect(serialized()).toContain('/reset?email=');
       expect(serialized()).not.toContain(EMAIL);
     });
 
@@ -166,6 +189,26 @@ describe('DOMCollector replay sanitization', () => {
 
         expect(serialized()).not.toContain(DRAFT);
       });
+
+      it('does not grow tracking across repeated mounts', async () => {
+        collector.startRecording();
+        const mountAndUnmount = async () => {
+          const container = document.createElement('div');
+          container.innerHTML = `<textarea>${DRAFT}</textarea>`;
+          document.body.appendChild(container);
+          await flush();
+          container.remove();
+          await flush();
+        };
+        await mountAndUnmount();
+        const baseline = trackedNodes(collector);
+        for (let i = 0; i < 10; i++) {
+          await mountAndUnmount();
+        }
+
+        expect(serialized()).not.toContain(DRAFT);
+        expect(trackedNodes(collector)).toBe(baseline);
+      });
     });
 
     // A recorded child frame calls rrweb's postMessage instead of our emit, so
@@ -175,6 +218,8 @@ describe('DOMCollector replay sanitization', () => {
       const REMOTE_TEXTAREA = 5;
       const REMOTE_TEXT = 6;
       const iframe = document.createElement('iframe');
+      // As in a real cross-origin frame, so rrweb never attaches it itself.
+      Object.defineProperty(iframe, 'contentDocument', { value: null });
 
       const postFromChild = (event: object) =>
         window.dispatchEvent(
@@ -205,6 +250,10 @@ describe('DOMCollector replay sanitization', () => {
         });
         document.body.appendChild(iframe);
         collector.startRecording();
+        childSnapshot();
+      });
+
+      const childSnapshot = () =>
         postFromChild({
           type: 2,
           timestamp: Date.now(),
@@ -241,7 +290,6 @@ describe('DOMCollector replay sanitization', () => {
             initialOffset: { top: 0, left: 0 },
           },
         });
-      });
 
       it('masks child text appended to an existing textarea', () => {
         childMutation({
@@ -271,6 +319,178 @@ describe('DOMCollector replay sanitization', () => {
         childMutation({ texts: [{ id: REMOTE_TEXT, value: DRAFT }] });
 
         expect(serialized()).not.toContain(DRAFT);
+      });
+
+      // rrweb emits one remove per removed subtree root.
+      it('does not grow tracking across repeated mounts', () => {
+        let nextId = 100;
+        const mountAndUnmount = () => {
+          const container = nextId++;
+          const textarea = nextId++;
+          const text = nextId++;
+          childMutation({
+            adds: [
+              {
+                parentId: 3,
+                nextId: null,
+                node: {
+                  type: 2,
+                  id: container,
+                  tagName: 'div',
+                  attributes: {},
+                  childNodes: [
+                    {
+                      type: 2,
+                      id: textarea,
+                      tagName: 'textarea',
+                      attributes: {},
+                      childNodes: [{ type: 3, id: text, textContent: CONTROL }],
+                    },
+                  ],
+                },
+              },
+            ],
+          });
+          childMutation({ texts: [{ id: text, value: DRAFT }] });
+          childMutation({ removes: [{ parentId: 3, id: container }] });
+        };
+        mountAndUnmount();
+        const baseline = trackedNodes(collector);
+        for (let i = 0; i < 10; i++) {
+          mountAndUnmount();
+        }
+
+        expect(serialized()).not.toContain(DRAFT);
+        expect(trackedNodes(collector)).toBe(baseline);
+      });
+
+      it('drops tracking when the frame re-snapshots or is removed', async () => {
+        const initial = trackedNodes(collector);
+        childSnapshot();
+        expect(trackedNodes(collector)).toBe(initial);
+
+        iframe.remove();
+        await flush();
+        expect(trackedNodes(collector)).toBe(0);
+      });
+    });
+
+    // Events restored from IndexedDB may come from an SDK version or a page
+    // that didn't sanitize, and carry a previous page's node ids.
+    describe('events restored from persistence', () => {
+      const LEGACY_TEXT = 13;
+
+      const legacyEvents = () => {
+        const now = Date.now();
+        return [
+          {
+            type: 4,
+            timestamp: now,
+            data: {
+              href: `https://app.example/reset?email=${EMAIL}`,
+              width: 800,
+              height: 600,
+            },
+          },
+          {
+            type: 2,
+            timestamp: now + 1,
+            data: {
+              node: {
+                type: 0,
+                id: 1,
+                childNodes: [
+                  {
+                    type: 2,
+                    id: 10,
+                    tagName: 'body',
+                    attributes: {},
+                    childNodes: [
+                      {
+                        type: 2,
+                        id: 11,
+                        tagName: 'p',
+                        attributes: {},
+                        childNodes: [
+                          { type: 3, id: 12, textContent: `Contact ${EMAIL}` },
+                        ],
+                      },
+                      {
+                        type: 2,
+                        id: 14,
+                        tagName: 'textarea',
+                        attributes: {},
+                        childNodes: [
+                          { type: 3, id: LEGACY_TEXT, textContent: DRAFT },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              initialOffset: { top: 0, left: 0 },
+            },
+          },
+          {
+            type: 3,
+            timestamp: now + 2,
+            data: {
+              source: 0,
+              adds: [],
+              removes: [],
+              attributes: [],
+              texts: [{ id: LEGACY_TEXT, value: `${DRAFT} v2` }],
+            },
+          },
+        ] as unknown as eventWithTime[];
+      };
+
+      const restoring = (events: eventWithTime[]) =>
+        ({
+          bind: vi.fn(),
+          restore: vi.fn(async (buffer: PersistableBuffer) => {
+            buffer.addBatch(events);
+          }),
+          flush: vi.fn().mockResolvedValue(undefined),
+          destroy: vi.fn(),
+        }) as unknown as ReplayPersistence;
+
+      const restoreInto = async (events: eventWithTime[]) => {
+        const restored = new DOMCollector({
+          sanitizer: new Sanitizer({ enabled: true }),
+          persistence: restoring(events),
+        });
+        restored.startRecording();
+        await flush();
+        return restored;
+      };
+
+      it('sanitizes and masks legacy events before buffering them', async () => {
+        collector = await restoreInto(legacyEvents());
+
+        expect(serialized()).toContain('/reset?email=');
+        expect(serialized()).toContain('Contact ');
+        expect(serialized()).not.toContain(EMAIL);
+        expect(serialized()).not.toContain(DRAFT);
+        // Restored ids belong to a previous page: no live tracking.
+        expect(trackedNodes(collector)).toBe(0);
+      });
+
+      it('leaves events restored twice unchanged', async () => {
+        const events = legacyEvents();
+        const first = await restoreInto(events);
+        const once = JSON.stringify(first.getEvents());
+        first.destroy();
+
+        collector = await restoreInto(events);
+        const twice = JSON.stringify(
+          collector.getEvents().slice(0, events.length)
+        );
+
+        expect(once).toContain(`"textContent":"${'*'.repeat(DRAFT.length)}"`);
+        expect(twice).toBe(
+          JSON.stringify(JSON.parse(once).slice(0, events.length))
+        );
       });
     });
 

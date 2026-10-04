@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Session replay page text now goes through the PII sanitizer; before this it was recorded verbatim (#169)
 - The page URL in session replay metadata is now sanitized, and replay events restored from cross-navigation persistence are sanitized before upload (#170)
+- `@bugspotter/common` bumped to 1.1.2: its email pattern no longer backtracks quadratically, which could freeze the page on large user-generated text now that replay runs it on every text node (#170)
 
 ## [2.1.0] - 2026-04-10
 

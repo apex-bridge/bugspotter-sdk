@@ -553,6 +553,18 @@ describe('DOMCollector replay sanitization', () => {
         expectShadowRedacted();
       });
     });
+
+    // Every text node now goes through the PII patterns on the main thread.
+    // @bugspotter/common < 1.1.2 had a quadratic email regex: one 50 KB
+    // paragraph of "a.a.a." froze the snapshot for seconds.
+    it('snapshots adversarial page text in linear time', () => {
+      document.body.innerHTML = `<p>${'a.'.repeat(25_000)}</p>`;
+      const start = performance.now();
+      collector.startRecording();
+      const ms = performance.now() - start;
+
+      expect(ms).toBeLessThan(1000);
+    });
   });
 
   describe('without sanitizer', () => {

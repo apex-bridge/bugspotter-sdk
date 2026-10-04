@@ -107,7 +107,7 @@ class StringSanitizer {
   }
 
   sanitize(value: string): string {
-    if (typeof value !== 'string' || !/\S/.test(value)) {
+    if (typeof value !== 'string') {
       return value;
     }
 

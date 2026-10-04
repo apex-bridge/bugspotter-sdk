@@ -170,6 +170,16 @@ describe('Sanitizer', () => {
       expect(output).toContain('[REDACTED-TOKEN]');
       expect(output).toContain('[REDACTED-SECRET]');
     });
+
+    it('applies custom patterns to whitespace-only strings', () => {
+      const customSanitizer = createSanitizer({
+        enabled: true,
+        patterns: ['custom'],
+        customPatterns: [{ name: 'tab', regex: /\t/g }],
+      });
+
+      expect(customSanitizer.sanitize('\t')).toBe('[REDACTED-TAB]');
+    });
   });
 
   describe('Cyrillic Text Support', () => {

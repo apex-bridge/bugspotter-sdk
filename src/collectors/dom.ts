@@ -1,5 +1,6 @@
-import { record } from 'rrweb';
-import type { eventWithTime } from '@rrweb/types';
+import { record, EventType, IncrementalSource } from 'rrweb';
+import { NodeType } from '@rrweb/types';
+import type { eventWithTime, serializedNodeWithId } from '@rrweb/types';
 import { CircularBuffer } from '../core/buffer';
 import type { Sanitizer } from '../utils/sanitize';
 import type {
@@ -52,6 +53,224 @@ export interface DOMCollectorConfig {
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger();
+
+// Same shape as rrweb's input masking: one asterisk per character.
+const maskFormText = (text: string): string => '*'.repeat(text.length);
+
+const isTextarea = (node: Node | null | undefined): boolean =>
+  node?.nodeName === 'TEXTAREA';
+
+type ReplayMirror = typeof record.mirror;
+
+/**
+ * Textarea ancestry for replay nodes record.mirror doesn't hold. A recorded
+ * cross-origin iframe posts its events to rrweb in the parent, which remaps
+ * their ids, and restored events carry a previous page's ids. Those nodes
+ * get parent links so a removal drops the whole subtree (rrweb emits one
+ * remove per subtree root). Mirror nodes resolve through the mirror and are
+ * never stored, so same-page mounts cost nothing here.
+ */
+class ReplayNodeTracker {
+  private readonly parents = new Map<number, number>();
+  private readonly children = new Map<number, Set<number>>();
+  private readonly textareas = new Set<number>();
+  private readonly textareaTexts = new Set<number>();
+  // Mirror nodes (iframe elements) that tracked subtrees hang off.
+  private readonly hosts = new Set<number>();
+
+  /** Without a mirror (restored events), every node is tracked. */
+  constructor(private readonly mirror?: ReplayMirror) {}
+
+  /** Restored events never went through this page's maskTextFn. */
+  get restored(): boolean {
+    return !this.mirror;
+  }
+
+  /** Entries held across all maps; read by tests. */
+  get size(): number {
+    return (
+      this.parents.size +
+      this.children.size +
+      this.textareas.size +
+      this.textareaTexts.size +
+      this.hosts.size
+    );
+  }
+
+  getNode(id: number): Node | null {
+    return this.mirror?.getNode(id) ?? null;
+  }
+
+  isTextarea(id: number): boolean {
+    return this.textareas.has(id) || isTextarea(this.getNode(id));
+  }
+
+  isTextareaText(id: number, node: Node | null): boolean {
+    return this.textareaTexts.has(id) || isTextarea(node?.parentNode);
+  }
+
+  track(
+    id: number,
+    parentId: number | undefined,
+    kind?: 'textarea' | 'textareaText'
+  ): void {
+    if (this.mirror?.has(id)) return;
+    if (parentId !== undefined) {
+      const previous = this.parents.get(id);
+      if (previous !== undefined) this.children.get(previous)?.delete(id);
+      this.parents.set(id, parentId);
+      let siblings = this.children.get(parentId);
+      if (!siblings) {
+        siblings = new Set();
+        this.children.set(parentId, siblings);
+      }
+      siblings.add(id);
+      if (this.mirror?.has(parentId)) this.hosts.add(parentId);
+    }
+    if (kind === 'textarea') this.textareas.add(id);
+    if (kind === 'textareaText') this.textareaTexts.add(id);
+  }
+
+  remove(id: number): void {
+    const parentId = this.parents.get(id);
+    if (parentId !== undefined) this.children.get(parentId)?.delete(id);
+    this.drop(id);
+  }
+
+  /** Drops subtrees whose iframe element left the mirror with an ancestor. */
+  pruneHosts(): void {
+    for (const host of this.hosts) {
+      if (!this.mirror?.has(host)) {
+        this.hosts.delete(host);
+        this.drop(host);
+      }
+    }
+  }
+
+  /** A frame's new snapshot replaces everything under its iframe element. */
+  dropChildren(id: number): void {
+    for (const child of this.children.get(id) ?? []) {
+      this.drop(child);
+    }
+    this.children.delete(id);
+  }
+
+  reset(): void {
+    this.parents.clear();
+    this.children.clear();
+    this.textareas.clear();
+    this.textareaTexts.clear();
+    this.hosts.clear();
+  }
+
+  private drop(id: number): void {
+    const stack = [id];
+    for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+      this.parents.delete(next);
+      this.textareas.delete(next);
+      this.textareaTexts.delete(next);
+      for (const child of this.children.get(next) ?? []) {
+        stack.push(child);
+      }
+      this.children.delete(next);
+    }
+  }
+}
+
+function sanitizeSerializedNode(
+  node: serializedNodeWithId,
+  sanitizer: Sanitizer,
+  nodes: ReplayNodeTracker,
+  parentId?: number,
+  inTextarea = false
+): void {
+  if (node.type === NodeType.Text) {
+    if (inTextarea) {
+      nodes.track(node.id, parentId, 'textareaText');
+    }
+    if (!node.textContent) return;
+    if (inTextarea) {
+      node.textContent = maskFormText(node.textContent);
+    } else if ((node.isShadow || nodes.restored) && !node.isStyle) {
+      node.textContent = sanitizer.sanitizeTextNode(node.textContent);
+    }
+    return;
+  }
+  if (node.type !== NodeType.Element && node.type !== NodeType.Document) {
+    return;
+  }
+  const childInTextarea =
+    node.type === NodeType.Element && node.tagName === 'textarea';
+  nodes.track(node.id, parentId, childInTextarea ? 'textarea' : undefined);
+  for (const child of node.childNodes) {
+    sanitizeSerializedNode(child, sanitizer, nodes, node.id, childInTextarea);
+  }
+}
+
+/**
+ * Patches rrweb 2.0.0-alpha.4 gaps before the event is buffered or queued
+ * (snapshot, added nodes, and text changes alike):
+ * - needMaskingText returns false for a text node with no parentElement, so
+ *   text directly under a ShadowRoot never reaches maskTextFn. Sanitize it.
+ * - A textarea's child text (its default value) is serialized as page text
+ *   through maskTextFn, while maskInputOptions only masks `attributes.value`.
+ *   Mask it like the value so form values never appear readable.
+ * - Meta events carry location.href verbatim. Sanitize it like metadata.url.
+ * Restored events may predate all of this, so their page text is sanitized
+ * here too. Every step is idempotent: already-sanitized events pass unchanged.
+ */
+function sanitizeReplayEvent(
+  event: eventWithTime,
+  sanitizer: Sanitizer,
+  nodes: ReplayNodeTracker
+): void {
+  if (event.type === EventType.FullSnapshot) {
+    // A new id space: one per record() call; restored events span page loads.
+    nodes.reset();
+    sanitizeSerializedNode(event.data.node, sanitizer, nodes);
+    return;
+  }
+  if (event.type === EventType.Meta) {
+    event.data.href = sanitizer.sanitize(event.data.href) as string;
+    return;
+  }
+  if (
+    event.type !== EventType.IncrementalSnapshot ||
+    event.data.source !== IncrementalSource.Mutation
+  ) {
+    return;
+  }
+  const { data } = event;
+  for (const remove of data.removes) {
+    nodes.remove(remove.id);
+  }
+  if (data.removes.length > 0) {
+    nodes.pruneHosts();
+  }
+  for (const add of data.adds) {
+    if (data.isAttachIframe) {
+      nodes.dropChildren(add.parentId);
+    }
+    sanitizeSerializedNode(
+      add.node,
+      sanitizer,
+      nodes,
+      add.parentId,
+      add.node.type === NodeType.Text && nodes.isTextarea(add.parentId)
+    );
+  }
+  for (const text of data.texts) {
+    if (!text.value) continue;
+    const node = nodes.getNode(text.id);
+    if (nodes.isTextareaText(text.id, node)) {
+      text.value = maskFormText(text.value);
+    } else if (!node || node.parentElement === null) {
+      // Unknown node: sanitize anyway (the sanitizer is idempotent).
+      text.value = sanitizer.sanitizeTextNode(text.value);
+    }
+  }
+}
+
 export class DOMCollector {
   private buffer: CircularBuffer;
   private stopRecordingFn?: () => void;
@@ -73,6 +292,8 @@ export class DOMCollector {
     recordCrossOriginIframes: boolean;
   };
   private sanitizer?: Sanitizer;
+  // Live textarea tracking, kept on the instance so tests can bound its size.
+  private replayNodes?: ReplayNodeTracker;
 
   constructor(config: DOMCollectorConfig = {}) {
     this.sanitizer = config.sanitizer;
@@ -108,6 +329,8 @@ export class DOMCollector {
       return;
     }
 
+    const sanitizer = this.sanitizer?.isEnabled() ? this.sanitizer : undefined;
+
     // Persistence opt-in: kick off the async restore now. While
     // it's in flight, rrweb's emit handler routes new events into
     // `emitQueue` instead of the buffer. After restore settles,
@@ -138,6 +361,14 @@ export class DOMCollector {
         getEvents: () => ownBuffer.getEvents(),
         addBatch: (events: eventWithTime[]) => {
           if (this.emitQueue !== currentQueue) return;
+          if (sanitizer) {
+            // Restored events may predate sanitizing. Their ids are a
+            // previous page's, so they get a tracker without the live mirror.
+            const restoredNodes = new ReplayNodeTracker();
+            for (const event of events) {
+              sanitizeReplayEvent(event, sanitizer, restoredNodes);
+            }
+          }
           ownBuffer.addBatch(events);
         },
         // Signal cancellation to ReplayPersistence so it skips the
@@ -183,8 +414,13 @@ export class DOMCollector {
     }
 
     try {
+      const nodes = sanitizer && new ReplayNodeTracker(record.mirror);
+      this.replayNodes = nodes;
       const recordConfig = {
         emit: (event: eventWithTime) => {
+          if (sanitizer && nodes) {
+            sanitizeReplayEvent(event, sanitizer, nodes);
+          }
           if (this.emitQueue) {
             this.emitQueue.push(event);
           } else {
@@ -199,12 +435,17 @@ export class DOMCollector {
         },
         recordCanvas: this.config.recordCanvas,
         recordCrossOriginIframes: this.config.recordCrossOriginIframes,
-        // PII sanitization for text content
-        maskTextFn: this.sanitizer
-          ? (text: string, element?: HTMLElement) => {
-              return this.sanitizer!.sanitizeTextNode(text, element);
-            }
-          : undefined,
+        // rrweb only calls maskTextFn on nodes matched by maskTextSelector,
+        // so '*' routes every text node through the sanitizer. Input values
+        // are masked by tag name: in alpha.4 maskAllInputs skips hidden and
+        // untyped inputs, and maskInputFn gets no element to spot passwords.
+        // Radio/checkbox/submit/button values (author-defined) stay readable.
+        ...(sanitizer && {
+          maskTextSelector: '*',
+          maskTextFn: (text: string, element?: HTMLElement) =>
+            sanitizer.sanitizeTextNode(text, element),
+          maskInputOptions: { input: true, textarea: true, select: true },
+        }),
         // Performance optimizations
         slimDOMOptions: {
           script: true, // Don't record script tags
@@ -252,6 +493,7 @@ export class DOMCollector {
       this.stopRecordingFn();
       this.isRecording = false;
       this.stopRecordingFn = undefined;
+      this.replayNodes?.reset();
       logger.debug('DOMCollector: Stopped recording');
     } catch (error) {
       logger.error('DOMCollector: Failed to stop recording', error);
